@@ -400,7 +400,10 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: abortController.signal,
-      });
+        // Background work must never starve interactive fetches (thread
+        // opens) of the browser's per-origin connection pool.
+        priority: "low",
+      } as RequestInit);
       if (startedRunId !== runId || stopped) return;
 
       if (response.ok) {
@@ -494,7 +497,10 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: abortController.signal,
-      });
+        // Background work must never starve interactive fetches (thread
+        // opens) of the browser's per-origin connection pool.
+        priority: "low",
+      } as RequestInit);
       if (startedRunId !== runId || stopped) return;
 
       if (response.status === 429) {

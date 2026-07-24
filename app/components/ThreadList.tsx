@@ -1,7 +1,7 @@
 "use client";
 
 import { Inbox } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useCallback } from "react";
 import type { Bucket } from "../../lib/taxonomy";
 import type { ThreadSummary } from "../../lib/types";
 import type { RunSnapshot } from "../lib/classify-orchestrator";
@@ -20,7 +20,7 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onOpenThread: (id: string) => void;
-  onWhy: (correcting: boolean) => void;
+  onWhy: (correcting: boolean) => void; // stable (useCallback upstream)
   onRetryFailed: () => void;
 };
 
@@ -43,6 +43,13 @@ export function ThreadList({
 }: Props) {
   const bucketById = new Map(buckets.map((bucket) => [bucket.id, bucket]));
   const failedCount = snapshot?.counts.failed ?? 0;
+  const selectAndWhy = useCallback(
+    (id: string, correcting: boolean) => {
+      onSelect(id);
+      onWhy(correcting);
+    },
+    [onSelect, onWhy],
+  );
 
   if (!threads.length && loading) {
     return (
@@ -93,9 +100,17 @@ export function ThreadList({
     );
   }
 
+  // Single pass: dateGroupOf parses each date once, not once per group.
+  const grouped = new Map<string, ThreadSummary[]>();
+  for (const thread of threads) {
+    const group = dateGroupOf(thread.date);
+    const bucketList = grouped.get(group);
+    if (bucketList) bucketList.push(thread);
+    else grouped.set(group, [thread]);
+  }
   const groups = DATE_GROUP_ORDER.map((group) => ({
     group,
-    items: threads.filter((thread) => dateGroupOf(thread.date) === group),
+    items: grouped.get(group) ?? [],
   })).filter(({ items }) => items.length > 0);
 
   return (
@@ -126,9 +141,9 @@ export function ThreadList({
                 corrected={isCorrected(thread.id)}
                 showBucketChip={activeTab === "all" || activeTab === "unsorted"}
                 selected={selectedId === thread.id}
-                onSelect={() => onSelect(thread.id)}
-                onOpenThread={() => onOpenThread(thread.id)}
-                onWhy={onWhy}
+                onSelect={onSelect}
+                onOpenThread={onOpenThread}
+                onWhy={selectAndWhy}
               />
             );
           })}

@@ -237,14 +237,24 @@ export function InboxApp() {
     return result;
   }, [buckets, effectiveBucketId, needsReview, threadsState.threads]);
 
-  const visibleThreads = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+  // Sorted once per data change (epochs precomputed); tab switches and
+  // per-decision snapshot ticks only re-run the cheap filter below.
+  const sortedThreads = useMemo(() => {
+    const epochById = new Map(
+      threadsState.threads.map((thread) => [thread.id, new Date(thread.date).getTime()]),
+    );
     return threadsState.threads
       .map((thread) =>
         thread.unread && localReads.get(thread.id) === thread.latestMessageId
           ? { ...thread, unread: false }
           : thread,
       )
+      .sort((a, b) => (epochById.get(b.id) ?? 0) - (epochById.get(a.id) ?? 0));
+  }, [localReads, threadsState.threads]);
+
+  const visibleThreads = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return sortedThreads
       .filter((thread) => {
         if (normalized) {
           const haystack = `${thread.sender} ${thread.subject} ${thread.preview}`.toLowerCase();
@@ -257,16 +267,19 @@ export function InboxApp() {
         const bucketId = effectiveBucketId(thread.id);
         if (activeTab === "review") return bucketId === "review" || needsReview(thread.id);
         return bucketId === activeTab;
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [activeTab, effectiveBucketId, localReads, needsReview, query, snapshot, threadsState.threads]);
+      });
+  }, [activeTab, effectiveBucketId, needsReview, query, snapshot, sortedThreads]);
 
   const { selectedId, setSelectedId, moveSelection } = useSelection(visibleThreads);
   const selectedThread = selectedId ? (threadById.get(selectedId) ?? null) : null;
   const failedCount = snapshot?.counts.failed ?? 0;
 
   const openThread = openThreadId ? (threadById.get(openThreadId) ?? null) : null;
-  const detailState = useThreadDetail(openThread ? openThread.id : null, source);
+  const detailState = useThreadDetail(
+    openThread ? openThread.id : null,
+    source,
+    openThread ? null : selectedId,
+  );
 
   // Everything already loaded from this sender — the panel costs zero fetches.
   const senderThreads = useMemo(() => {
@@ -281,6 +294,11 @@ export function InboxApp() {
       )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [localReads, openThread, threadsState.threads]);
+
+  const openWhy = useCallback(
+    (correcting: boolean) => setPanel({ open: true, correcting }),
+    [],
+  );
 
   const openThreadAt = useCallback(
     (threadId: string) => {
@@ -615,7 +633,7 @@ export function InboxApp() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onOpenThread={openThreadAt}
-            onWhy={(correcting) => setPanel({ open: true, correcting })}
+            onWhy={openWhy}
             onRetryFailed={() => retryFailed()}
           />
         </main>

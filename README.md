@@ -26,7 +26,9 @@ loaded conversation with that sender and how each was classified, at zero extra 
 Gmail (read-only) ──► /api/gmail/threads      pages of 25, format=full, MIME → 1,200-char excerpt
                         │                      + structured signals (List-Unsubscribe, Gmail labels)
                         ▼
-              client orchestrator             bounded fan-out (8 in flight), retry w/ backoff,
+              client orchestrator             bounded fan-out (5 in flight — one browser
+                        │                      connection stays reserved so opening a thread
+                        │                      mid-run paints in ~30ms, not behind an 8s call),
                         │                      429-aware global pause, localStorage decision cache
                         ▼
              /api/ai/triage (per thread) ──►  Kimi K3 (Moonshot), JSON mode, low reasoning effort

@@ -7,7 +7,13 @@
 export const PAGE_SIZE = 25;
 export const MAX_THREADS = 200;
 export const GMAIL_FETCH_CONCURRENCY = 5;
-export const CLASSIFY_CONCURRENCY = 8;
+/**
+ * 5, not 8: browsers allow 6 HTTP/1.1 connections per origin, and a full
+ * pool starves interactive fetches (opening a thread mid-run waited on an
+ * 8s triage call). One reserved connection keeps the UI instant; the
+ * classification pass pays ~30s on a cold 50-thread run, once.
+ */
+export const CLASSIFY_CONCURRENCY = 5;
 export const EXCERPT_BUDGET = 1_200;
 export const MAX_TAXONOMY_BUCKETS = 20;
 export const PROMPT_VERSION = "triage-v6";

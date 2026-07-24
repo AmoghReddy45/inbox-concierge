@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleAlert, LoaderCircle } from "lucide-react";
+import { memo } from "react";
 import type { Bucket } from "../../lib/taxonomy";
 import type { ThreadSummary } from "../../lib/types";
 import type { ThreadTaskState } from "../lib/classify-orchestrator";
@@ -14,12 +15,17 @@ type Props = {
   corrected: boolean;
   showBucketChip: boolean;
   selected: boolean;
-  onSelect: () => void;
-  onOpenThread: () => void;
-  onWhy: (correcting: boolean) => void;
+  /** Stable callbacks taking the thread id — rows stay memoizable. */
+  onSelect: (id: string) => void;
+  onOpenThread: (id: string) => void;
+  onWhy: (id: string, correcting: boolean) => void;
 };
 
-export function ThreadRow({
+/**
+ * Memoized: during a live classification run only rows whose decision
+ * (or selection) changed re-render, not all 200.
+ */
+export const ThreadRow = memo(function ThreadRow({
   thread,
   bucket,
   taskState,
@@ -43,10 +49,10 @@ export function ThreadRow({
         type="button"
         className="thread-row-main"
         onClick={() => {
-          onSelect();
-          onOpenThread();
+          onSelect(thread.id);
+          onOpenThread(thread.id);
         }}
-        onFocus={onSelect}
+        onFocus={() => onSelect(thread.id)}
         aria-label={`${thread.sender}: ${thread.subject}`}
       >
         <span className="row-dot" aria-hidden="true" />
@@ -79,8 +85,8 @@ export function ThreadRow({
         <button
           type="button"
           onClick={() => {
-            onSelect();
-            onWhy(true);
+            onSelect(thread.id);
+            onWhy(thread.id, true);
           }}
         >
           Correct
@@ -88,8 +94,8 @@ export function ThreadRow({
         <button
           type="button"
           onClick={() => {
-            onSelect();
-            onWhy(false);
+            onSelect(thread.id);
+            onWhy(thread.id, false);
           }}
         >
           Why
@@ -97,4 +103,4 @@ export function ThreadRow({
       </span>
     </div>
   );
-}
+});
