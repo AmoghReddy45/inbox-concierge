@@ -1,18 +1,11 @@
 # Inbox Concierge
 
-**Live: [inbox-concierge.reddy-amogh2004.workers.dev](https://inbox-concierge.reddy-amogh2004.workers.dev)** —
-click "Explore demo inbox" for the full experience with zero setup: real LLM classification,
-voice learning, and reply drafting on an authored 50-thread corpus. (Gmail sign-in is
-limited to allowlisted test users while the OAuth app is unverified — ask and I'll add you.)
-
 Gmail triage with evidence for every decision. Connect a Google account and the concierge
 pulls your last 200 threads and sorts them into buckets — Important, Can wait, Newsletter,
 Auto-archive, Customer escalations — using an LLM classification pipeline that **shows its
 evidence, measures its own cost and latency, and abstains to a "Needs review" queue when it
 isn't sure**. Create your own bucket in plain language and every thread is reclassified,
-with honest live progress. Then it goes further: it **learns your voice from your last 200
-sent emails and drafts replies that sound like you** — with every claim about your style
-traceable to a measured number.
+with honest live progress.
 
 Built for the Tenex take-home. The UI is a deliberate recreation of Superhuman's
 split-inbox language (their "Snow" and "Carbon" themes included), with the decision
@@ -52,71 +45,6 @@ Design positions worth knowing before reading the code:
   are aborted and stale responses discarded when it changes. Decisions cache locally keyed by
   `(promptVersion, taxonomyVersion, threadId, latestMessageId)`, so reloads and unchanged
   threads are free.
-- **High-risk decisions get a second, adversarial pass.** Auto-archive verdicts and
-  low-priority calls with a high-stakes runner-up go to a risk verifier whose only job is to
-  argue the case *against* hiding the thread, with verbatim evidence. A challenge is never
-  averaged away — it flips the thread to Needs review with the challenge quotes attached;
-  concurrence marks the decision verified. Disagreement becomes visible doubt, not fake
-  confidence.
-- **The pipeline uses corpus structure, not just isolated threads.** Once a sender has two
-  settled classifications, later threads carry that prior as a labeled hint (judged on
-  merits, never overridden); threads are processed breadth-first across senders to maximize
-  prior coverage. Deterministic signals — did the user already reply, is the sender in the
-  user's own domain, bulk-mail headers — ride alongside the untrusted text.
-
-## Measured quality (`npm run eval`)
-
-The eval harness runs the demo corpus through the **production endpoint and the production
-client orchestrator** (verifier included) against 32 hand-labeled golden expectations,
-including two adversarial fixtures. Latest run (kimi-k3, triage-v6):
-
-| Metric | Result |
-| --- | --- |
-| Golden pass rate | **31/32 (97%)** |
-| Important-thread recall | **5/5** |
-| False auto-archive (important hidden, unflagged) | **0** |
-| Prompt-injection email obeyed | **No** — landed auto-archive, flagged for review |
-| Spoofed "security alert" | Held for review |
-| Risk verifier | triggered 16/50 (32%), 2 challenges |
-| Latency / cost | p50 8.4s, p95 14.0s · $0.23 for the full 50-thread pass |
-
-The one miss is a dentist-appointment confirmation classified `important` (we label it
-`wait`) — a defensible read, kept as an honest miss rather than widening the label to
-manufacture 100%.
-
-## Reply drafts in your voice (beyond-spec extension)
-
-**Learn my voice** (⌘K or the account menu) reads your last ~200 sent messages — sent mail
-is readable under the same `gmail.readonly` scope, so the app still cannot write anything —
-and builds a voice profile where **code measures, the model describes**:
-
-- Every number is computed deterministically: signature detection (>40% trailing-block
-  share), greeting/sign-off inventories with real usage shares and an internal/external
-  split, median and p90 reply length, one-liner rate, and per-situation reply behavior
-  (what you answer, how fast). The LLM proposes candidate patterns and picks verbatim
-  exemplars of your own writing; any number it invents is overwritten by the measured one.
-- **Recency is enforced, not requested**: the newest 50 sends carry full bodies at 3×
-  weight (then 500 chars at 2×, 300 at 1×), and ≥70% of exemplars must come from the
-  newest 80 samples — a code-side floor applied after model selection.
-- Exemplars are referenced **by sample id** and extracted verbatim in code — the model
-  cannot fabricate "your" words. The whole profile is inspectable in-app (shares, quirks,
-  drift notes, exemplars), editable (exclude an exemplar, edit the signature — each edit
-  bumps a revision that invalidates cached drafts), and lives only in `localStorage`.
-
-Opening a thread then shows a **reply-likelihood chip before any spend** ("2 of your last
-32 replies answered escalation mail, typically within ~55m" — or that none did), computed
-from measured behavior. **Draft a reply (~$0.02)** (`r`) generates one draft on demand:
-profile-first prompt, situation-matched exemplars chosen by deterministic scoring (no
-embeddings), thread content in an untrusted fence. Validation enforces the measured length
-norm and drops any "why it sounds like you" claim that doesn't trace to a real profile
-element. The draft is editable; **copy is the only exit**. Fresh-corpus staleness is
-probed once per session (2 subrequests) and surfaces as a rebuild chip — never a silent
-rebuild, never silent spend. Without an API key, a free stats-only profile still builds,
-and drafting declines honestly rather than faking a template.
-
-Demo mode exercises the identical pipeline against an authored 38-message sent corpus with
-one recognizable voice; the measured profile ($0.04, ~50s) and drafts ($0.009) shown in
-the video are real calls.
 
 ## Running it
 
@@ -191,13 +119,6 @@ User corrections feed future runs as explicit hints (`<classification_feedback>`
 never an override of the visible decision.
 
 ## Deliberate omissions (and the production path)
-
-- **AI endpoints are same-origin-guarded, not session-gated.** `/api/ai/*` reject
-  cross-site requests via `Sec-Fetch-Site` and cap body sizes on the actual bytes read,
-  but do not require the Google session cookie — demo mode (no Google account) must be
-  able to classify and draft, and the eval harness drives the production endpoint
-  headlessly. Production path: a signed demo token plus session gating for connected
-  users, with per-session spend budgets.
 
 - **No server-side job queue.** Two hundred classifications are orchestrated client-side with
   bounded concurrency — the simplest thing that is genuinely real. In production this becomes
