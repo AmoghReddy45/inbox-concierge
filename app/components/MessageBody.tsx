@@ -24,9 +24,21 @@ const IFRAME_CSP = [
   "base-uri 'none'",
 ].join("; ");
 
-function buildSrcDoc(html: string): string {
+/**
+ * Email content always renders on a white canvas, so dark-mode media
+ * queries inside the email (which follow the OS preference straight into
+ * the iframe) would paint light text on white. Defang them: an unknown
+ * media feature evaluates to false.
+ */
+function neutralizeDarkScheme(html: string): string {
+  return html.replace(/prefers-color-scheme\s*:\s*dark/gi, "prefers-color-scheme: none-forced-light");
+}
+
+function buildSrcDoc(rawHtml: string): string {
+  const html = neutralizeDarkScheme(rawHtml);
   const head = [
     `<meta http-equiv="Content-Security-Policy" content="${IFRAME_CSP}">`,
+    '<meta name="color-scheme" content="light only">',
     '<base target="_blank" rel="noopener noreferrer">',
     "<style>",
     ":root { color-scheme: light; }",
