@@ -30,6 +30,13 @@ import { VoiceProfileSheet } from "./VoiceProfileSheet";
 type Correction = { bucketId: string; latestMessageId: string; correctedAt: number };
 
 const CORRECTIONS_KEY = "tenex.corrections.v1";
+/**
+ * Threads read IN THIS APP. The scope is gmail.readonly, so Gmail's own
+ * unread state is untouchable — the dot clears locally on open and comes
+ * back if a newer message arrives (keyed by latestMessageId).
+ */
+const READS_KEY = "tenex.read.v1";
+const MAX_READ_ENTRIES = 600;
 
 const SHORTCUTS: Array<[string, string]> = [
   ["j / k", "Next / previous thread"],
@@ -73,6 +80,36 @@ export function InboxApp() {
     }
     return new Map();
   });
+
+  const [localReads, setLocalReads] = useState<Map<string, string>>(() => {
+    if (typeof window === "undefined") return new Map();
+    try {
+      const raw = window.localStorage.getItem(READS_KEY);
+      if (raw) return new Map(Object.entries(JSON.parse(raw) as Record<string, string>));
+    } catch {
+      // Corrupted read-state — start clean.
+    }
+    return new Map();
+  });
+
+  const markLocallyRead = useCallback((thread: { id: string; latestMessageId: string }) => {
+    setLocalReads((current) => {
+      if (current.get(thread.id) === thread.latestMessageId) return current;
+      const next = new Map(current);
+      next.set(thread.id, thread.latestMessageId);
+      while (next.size > MAX_READ_ENTRIES) {
+        const oldest = next.keys().next().value;
+        if (oldest === undefined) break;
+        next.delete(oldest);
+      }
+      try {
+        window.localStorage.setItem(READS_KEY, JSON.stringify(Object.fromEntries(next)));
+      } catch {
+        // Best-effort.
+      }
+      return next;
+    });
+  }, []);
 
   // Corrections become feedback hints for future classify calls (never overrides).
   const feedbackHints = useMemo(() => {
@@ -203,6 +240,11 @@ export function InboxApp() {
   const visibleThreads = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return threadsState.threads
+      .map((thread) =>
+        thread.unread && localReads.get(thread.id) === thread.latestMessageId
+          ? { ...thread, unread: false }
+          : thread,
+      )
       .filter((thread) => {
         if (normalized) {
           const haystack = `${thread.sender} ${thread.subject} ${thread.preview}`.toLowerCase();
@@ -217,7 +259,7 @@ export function InboxApp() {
         return bucketId === activeTab;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [activeTab, effectiveBucketId, needsReview, query, snapshot, threadsState.threads]);
+  }, [activeTab, effectiveBucketId, localReads, needsReview, query, snapshot, threadsState.threads]);
 
   const { selectedId, setSelectedId, moveSelection } = useSelection(visibleThreads);
   const selectedThread = selectedId ? (threadById.get(selectedId) ?? null) : null;
@@ -231,8 +273,10 @@ export function InboxApp() {
       setSelectedId(threadId);
       setOpenThreadId(threadId);
       setPanel({ open: false, correcting: false });
+      const thread = threadById.get(threadId);
+      if (thread) markLocallyRead(thread);
     },
-    [setSelectedId],
+    [markLocallyRead, setSelectedId, threadById],
   );
 
   /** j/k inside the thread view steps through the visible list explicitly. */
