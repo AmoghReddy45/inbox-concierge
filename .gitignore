@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local working docs
 Tenex_Inbox_Concierge_Strategy.docx
+
+# macOS/iCloud sync-conflict duplicates
+* 2.*
