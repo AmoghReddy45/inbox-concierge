@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
-
-const display = Plus_Jakarta_Sans({
-  variable: "--font-plus-jakarta",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const ui = Inter({
   variable: "--font-inter",
@@ -22,6 +16,9 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
+// Applies the stored Snow/Carbon preference before first paint (no theme flash).
+const themeScript = `try{var t=localStorage.getItem("tenex.theme.v1");if(t==="carbon")document.documentElement.dataset.theme="dark";else if(t==="snow")document.documentElement.dataset.theme="light";}catch(e){}`;
+
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host =
@@ -34,8 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
   const title = "Inbox Concierge — Trustworthy AI inbox triage";
   const description =
-    "A read-only, evidence-first attention system for fast and trustworthy inbox triage.";
-  const image = new URL("/og.png", origin).toString();
+    "Gmail triage with evidence for every decision: your last 200 threads sorted into buckets by an LLM pipeline that abstains when it isn't sure.";
 
   return {
     metadataBase: new URL(origin),
@@ -51,13 +47,6 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: origin,
-      images: [{ url: image, width: 1734, height: 908, alt: "Inbox Concierge product workspace" }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [image],
     },
   };
 }
@@ -68,10 +57,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${display.variable} ${ui.variable} ${mono.variable}`}>
-        {children}
-      </body>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body className={`${ui.variable} ${mono.variable}`}>{children}</body>
     </html>
   );
 }

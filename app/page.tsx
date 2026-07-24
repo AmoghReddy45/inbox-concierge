@@ -1,6 +1,5 @@
-import { InboxConcierge } from "./InboxConcierge";
+import { InboxApp } from "./components/InboxApp";
 
 export default function Home() {
-  return <InboxConcierge />;
+  return <InboxApp />;
 }
-
