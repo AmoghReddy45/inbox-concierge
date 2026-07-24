@@ -58,13 +58,17 @@ export function DecisionPanel({
       ? "Classification failed"
       : task?.state === "classifying"
         ? "Classifying"
-        : task?.state === "queued"
-          ? "Queued"
-          : decision?.needsReview
-            ? "Needs review"
-            : decision
-              ? "Strong evidence"
-              : "Waiting";
+        : task?.state === "verifying"
+          ? "Verifying risk"
+          : task?.state === "queued"
+            ? "Queued"
+            : decision?.needsReview
+              ? "Needs review"
+              : decision?.verified
+                ? "Strong evidence · verified"
+                : decision
+                  ? "Strong evidence"
+                  : "Waiting";
 
   return (
     <aside
@@ -229,6 +233,15 @@ export function DecisionPanel({
                 <dt>Cost</dt>
                 <dd>{meta ? formatCost(meta.costMicros) : "—"}</dd>
               </div>
+              {meta?.verification && (
+                <div>
+                  <dt>Risk verifier</dt>
+                  <dd>
+                    {meta.verification.upheld ? "upheld" : "challenged"} ·{" "}
+                    {formatCost(meta.verification.costMicros)}
+                  </dd>
+                </div>
+              )}
             </dl>
           )}
         </section>

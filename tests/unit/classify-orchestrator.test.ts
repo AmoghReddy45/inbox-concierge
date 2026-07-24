@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createClassifyOrchestrator } from "../../app/lib/classify-orchestrator";
 import { DecisionCache } from "../../app/lib/decision-cache";
 import type { RunSnapshot } from "../../app/lib/classify-orchestrator";
-import type { Decision, ThreadSummary, TriageMeta, TriageResponse } from "../../lib/types";
+import { PROMPT_VERSION, type Decision, type ThreadSummary, type TriageMeta, type TriageResponse } from "../../lib/types";
 
 function makeThread(id: string, latestMessageId = `${id}-m1`): ThreadSummary {
   return {
@@ -19,6 +19,8 @@ function makeThread(id: string, latestMessageId = `${id}-m1`): ThreadSummary {
     listUnsubscribe: false,
     messageCount: 1,
     latestMessageId,
+    userReplied: false,
+    senderDomainRelation: "external" as const,
   };
 }
 
@@ -42,7 +44,7 @@ function makeMeta(taxonomyVersion: string, costMicros: number | null = 100): Tri
   return {
     source: "llm",
     model: "kimi-k3",
-    promptVersion: "triage-v5",
+    promptVersion: PROMPT_VERSION,
     latencyMs: 500,
     usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
     costMicros,
@@ -130,7 +132,7 @@ test("respects the concurrency cap", async () => {
 test("cache hits classify immediately without fetch and add zero cost", async () => {
   const storage = makeStorage();
   const cache = new DecisionCache(storage);
-  cache.set(cache.key("triage-v5", "tax-1", "t1", "t1-m1"), {
+  cache.set(cache.key(PROMPT_VERSION, "tax-1", "t1", "t1-m1"), {
     decision: makeDecision("wait"),
     meta: makeMeta("tax-1", 999),
     storedAt: 1,
@@ -324,6 +326,152 @@ test("manual pause stops new starts; resume continues; new taxonomy auto-resumes
   orchestrator.setTaxonomy([...TAXONOMY, { id: "x", name: "X", description: "d" }], "tax-2");
   assert.equal(orchestrator.getSnapshot().manuallyPaused, false, "new taxonomy resumes");
   await orchestrator.whenIdle();
+});
+
+function archiveResponse(threadId: string, taxonomyVersion: string): Response {
+  const body: TriageResponse = {
+    threadId,
+    decision: { ...makeDecision("archive"), runnerUpBucketId: null },
+    meta: makeMeta(taxonomyVersion),
+  };
+  return new Response(JSON.stringify(body), { status: 200 });
+}
+
+function verifyOk(threadId: string, taxonomyVersion: string, upheld: boolean): Response {
+  return new Response(
+    JSON.stringify({
+      threadId,
+      verification: upheld
+        ? { upheld: true, challengeEvidence: [], reason: "Routine automated mail." }
+        : {
+            upheld: false,
+            challengeEvidence: ["Excerpt"],
+            reason: "Mentions an unanswered payment question.",
+          },
+      meta: { ...makeMeta(taxonomyVersion, 40), promptVersion: "verify-v1" },
+    }),
+    { status: 200 },
+  );
+}
+
+test("archive decisions get verified; upheld marks verified", async () => {
+  const modes: string[] = [];
+  const orchestrator = createClassifyOrchestrator({
+    cache: null,
+    sleep: instantSleep,
+    fetchFn: async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      modes.push(request.mode ?? "classify");
+      if (request.mode === "verify") return verifyOk(request.thread.id, request.taxonomyVersion, true);
+      return archiveResponse(request.thread.id, request.taxonomyVersion);
+    },
+  });
+  orchestrator.setTaxonomy(TAXONOMY, "tax-1");
+  orchestrator.enqueue([makeThread("t1")]);
+  await orchestrator.whenIdle();
+
+  const snapshot = orchestrator.getSnapshot();
+  const task = snapshot.tasks.get("t1");
+  assert.deepEqual(modes, ["classify", "verify"]);
+  assert.equal(task?.state, "classified");
+  assert.equal(task?.decision?.verified, true);
+  assert.equal(task?.decision?.needsReview, false);
+  assert.equal(snapshot.counts.verified, 1);
+  assert.equal(snapshot.counts.challenged, 0);
+  assert.equal(snapshot.telemetry.costMicros, 140, "verification cost included");
+});
+
+test("verifier challenge flips to needs-review with challenge evidence", async () => {
+  const orchestrator = createClassifyOrchestrator({
+    cache: null,
+    sleep: instantSleep,
+    fetchFn: async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.mode === "verify") return verifyOk(request.thread.id, request.taxonomyVersion, false);
+      return archiveResponse(request.thread.id, request.taxonomyVersion);
+    },
+  });
+  orchestrator.setTaxonomy(TAXONOMY, "tax-1");
+  orchestrator.enqueue([makeThread("t1")]);
+  await orchestrator.whenIdle();
+
+  const task = orchestrator.getSnapshot().tasks.get("t1");
+  assert.equal(task?.decision?.needsReview, true);
+  assert.equal(task?.decision?.bucketId, "archive", "bucket preserved, flagged");
+  assert.ok(
+    task?.decision?.ambiguityReasons.some((reason) => reason.startsWith("Verifier challenge:")),
+  );
+  assert.equal(orchestrator.getSnapshot().counts.challenged, 1);
+});
+
+test("verify failures leave the decision standing, unverified", async () => {
+  let verifyCalls = 0;
+  const orchestrator = createClassifyOrchestrator({
+    cache: null,
+    sleep: instantSleep,
+    fetchFn: async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.mode === "verify") {
+        verifyCalls += 1;
+        return errorResponse(502, "upstream_error");
+      }
+      return archiveResponse(request.thread.id, request.taxonomyVersion);
+    },
+  });
+  orchestrator.setTaxonomy(TAXONOMY, "tax-1");
+  orchestrator.enqueue([makeThread("t1")]);
+  await orchestrator.whenIdle();
+
+  const task = orchestrator.getSnapshot().tasks.get("t1");
+  assert.equal(verifyCalls, 2, "one retry then give up");
+  assert.equal(task?.state, "classified");
+  assert.equal(task?.decision?.verified, undefined);
+  assert.equal(task?.meta?.verification, undefined);
+});
+
+test("sender priors ride along after two settled threads from a sender", async () => {
+  const priors: Array<unknown> = [];
+  const orchestrator = createClassifyOrchestrator({
+    cache: null,
+    concurrency: 1,
+    sleep: instantSleep,
+    fetchFn: async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      priors.push(request.senderPrior ?? null);
+      return okResponse(request.thread.id, request.taxonomyVersion);
+    },
+  });
+  orchestrator.setTaxonomy(TAXONOMY, "tax-1");
+  const sameSender = (id: string) => ({ ...makeThread(id), email: "news@bulk.com" });
+  orchestrator.enqueue([sameSender("t1"), sameSender("t2"), sameSender("t3")]);
+  await orchestrator.whenIdle();
+
+  assert.deepEqual(priors[0], null);
+  assert.deepEqual(priors[1], null, "one settle is not yet a prior");
+  assert.deepEqual(priors[2], { bucketId: "important", count: 2 });
+});
+
+test("enqueue orders one thread per unseen sender first", async () => {
+  const seen: string[] = [];
+  const orchestrator = createClassifyOrchestrator({
+    cache: null,
+    concurrency: 1,
+    sleep: instantSleep,
+    fetchFn: async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      seen.push(request.thread.id);
+      return okResponse(request.thread.id, request.taxonomyVersion);
+    },
+  });
+  orchestrator.setTaxonomy(TAXONOMY, "tax-1");
+  orchestrator.enqueue([
+    { ...makeThread("a1"), email: "a@x.com" },
+    { ...makeThread("a2"), email: "a@x.com" },
+    { ...makeThread("b1"), email: "b@y.com" },
+    { ...makeThread("c1"), email: "c@z.com" },
+  ]);
+  await orchestrator.whenIdle();
+  assert.deepEqual(seen, ["a1", "b1", "c1", "a2"]);
 });
 
 test("re-enqueueing a thread with a new latestMessageId reclassifies it", async () => {

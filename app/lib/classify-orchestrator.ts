@@ -1,24 +1,30 @@
 import {
   CLASSIFY_CONCURRENCY,
+  HIGH_STAKES_BUCKETS,
   MAX_FEEDBACK_HINTS,
   PROMPT_VERSION,
   isApiErrorBody,
   type ApiErrorBody,
+  type Decision,
   type FeedbackHint,
   type TaxonomyBucket,
   type ThreadSummary,
+  type TriageMeta,
   type TriageRequest,
   type TriageResponse,
+  type VerifyResponse,
 } from "../../lib/types";
 import { DecisionCache, type StoredDecision } from "./decision-cache";
 
-export type ThreadTaskState = "queued" | "classifying" | "classified" | "failed";
+export type ThreadTaskState = "queued" | "classifying" | "verifying" | "classified" | "failed";
 
 export type ThreadTask = {
   threadId: string;
   state: ThreadTaskState;
   /** Number of classify calls started for this thread in the current run. */
   attempts: number;
+  /** Number of verifier calls started for this thread in the current run. */
+  verifyAttempts?: number;
   decision?: TriageResponse["decision"];
   meta?: TriageResponse["meta"];
   error?: ApiErrorBody["error"];
@@ -31,9 +37,14 @@ export type RunSnapshot = {
   counts: {
     queued: number;
     classifying: number;
+    verifying: number;
     classified: number;
     failed: number;
     cached: number;
+    /** Classified decisions the risk verifier reviewed (upheld or challenged). */
+    verified: number;
+    /** Verifier challenges that flipped a decision to needs-review. */
+    challenged: number;
   };
   telemetry: {
     inputTokens: number;
@@ -99,6 +110,10 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
   const threads = new Map<string, ThreadSummary>();
   const tasks = new Map<string, ThreadTask>();
   const queue: string[] = [];
+  /** Threads awaiting the risk-verifier second pass (drained before new classifies). */
+  const verifyQueue: string[] = [];
+  /** Settled bucket counts per sender email (lowercase) — the corpus prior. */
+  const senderStats = new Map<string, Map<string, number>>();
   const listeners = new Set<(snapshot: RunSnapshot) => void>();
   const idleResolvers: Array<() => void> = [];
 
@@ -132,10 +147,25 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
   }
 
   function getSnapshot(): RunSnapshot {
-    const counts = { queued: 0, classifying: 0, classified: 0, failed: 0, cached: 0 };
+    const counts = {
+      queued: 0,
+      classifying: 0,
+      verifying: 0,
+      classified: 0,
+      failed: 0,
+      cached: 0,
+      verified: 0,
+      challenged: 0,
+    };
     for (const task of tasks.values()) {
       counts[task.state] += 1;
-      if (task.state === "classified" && task.meta?.cached) counts.cached += 1;
+      if (task.state === "classified") {
+        if (task.meta?.cached) counts.cached += 1;
+        if (task.meta?.verification) {
+          counts.verified += 1;
+          if (!task.meta.verification.upheld) counts.challenged += 1;
+        }
+      }
     }
     return {
       runId,
@@ -166,7 +196,9 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
     if (pausedUntil !== null) return false;
     if (inFlight > 0) return false;
     for (const task of tasks.values()) {
-      if (task.state === "queued" || task.state === "classifying") return false;
+      if (task.state === "queued" || task.state === "classifying" || task.state === "verifying") {
+        return false;
+      }
     }
     return true;
   }
@@ -187,30 +219,98 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
     queue.push(threadId);
   }
 
-  function settleClassified(threadId: string, payload: TriageResponse, cached: boolean) {
-    const meta = cached ? { ...payload.meta, cached: true } : payload.meta;
-    setTask(threadId, { state: "classified", decision: payload.decision, meta, error: undefined });
-    if (!cached) {
-      if (payload.meta.usage) {
-        telemetry.inputTokens += payload.meta.usage.inputTokens;
-        telemetry.outputTokens += payload.meta.usage.outputTokens;
-      }
-      if (payload.meta.costMicros !== null) {
-        telemetry.costMicrosSum += payload.meta.costMicros;
-        telemetry.hasCost = true;
-      }
-      if (payload.meta.source === "llm") {
-        telemetry.latencySum += payload.meta.latencyMs;
-        telemetry.latencyCount += 1;
-      }
-      const thread = threads.get(threadId);
-      if (cache && thread) {
-        cache.set(
-          cache.key(PROMPT_VERSION, taxonomyVersion, threadId, thread.latestMessageId),
-          { decision: payload.decision, meta: payload.meta, storedAt: now() },
-        );
-      }
+  function recordCallTelemetry(meta: TriageMeta) {
+    if (meta.usage) {
+      telemetry.inputTokens += meta.usage.inputTokens;
+      telemetry.outputTokens += meta.usage.outputTokens;
     }
+    if (meta.costMicros !== null) {
+      telemetry.costMicrosSum += meta.costMicros;
+      telemetry.hasCost = true;
+    }
+    if (meta.source === "llm") {
+      telemetry.latencySum += meta.latencyMs;
+      telemetry.latencyCount += 1;
+    }
+  }
+
+  function highStakes(bucketId: string) {
+    return (HIGH_STAKES_BUCKETS as readonly string[]).includes(bucketId);
+  }
+
+  /** Should the risk verifier double-check this decision? (LLM decisions only.) */
+  function needsVerification(thread: ThreadSummary, decision: Decision, meta: TriageMeta) {
+    if (meta.source !== "llm" || decision.needsReview) return false;
+    if (decision.bucketId === "archive") return true;
+    if (
+      decision.runnerUpBucketId &&
+      highStakes(decision.runnerUpBucketId) &&
+      !highStakes(decision.bucketId)
+    ) {
+      return true;
+    }
+    return (
+      thread.unread &&
+      thread.senderDomainRelation === "external" &&
+      !thread.listUnsubscribe &&
+      !highStakes(decision.bucketId)
+    );
+  }
+
+  /** Final settlement: task classified, cache written, sender prior recorded. */
+  function finalizeClassified(
+    threadId: string,
+    decision: Decision,
+    meta: TriageMeta,
+    cached: boolean,
+  ) {
+    const finalMeta = cached ? { ...meta, cached: true } : meta;
+    setTask(threadId, { state: "classified", decision, meta: finalMeta, error: undefined });
+    const thread = threads.get(threadId);
+    if (!cached && cache && thread) {
+      cache.set(cache.key(PROMPT_VERSION, taxonomyVersion, threadId, thread.latestMessageId), {
+        decision,
+        meta,
+        storedAt: now(),
+      });
+    }
+    if (thread && !decision.needsReview) {
+      const email = thread.email.toLowerCase();
+      const stats = senderStats.get(email) ?? new Map<string, number>();
+      stats.set(decision.bucketId, (stats.get(decision.bucketId) ?? 0) + 1);
+      senderStats.set(email, stats);
+    }
+  }
+
+  /** Primary classify result: record cost, then verify or finalize. */
+  function settleClassified(threadId: string, payload: TriageResponse, cached: boolean) {
+    if (cached) {
+      finalizeClassified(threadId, payload.decision, payload.meta, true);
+      return;
+    }
+    recordCallTelemetry(payload.meta);
+    const thread = threads.get(threadId);
+    if (thread && needsVerification(thread, payload.decision, payload.meta)) {
+      setTask(threadId, {
+        state: "verifying",
+        decision: payload.decision,
+        meta: payload.meta,
+        error: undefined,
+      });
+      verifyQueue.push(threadId);
+      return;
+    }
+    finalizeClassified(threadId, payload.decision, payload.meta, false);
+  }
+
+  function senderPriorFor(thread: ThreadSummary) {
+    const stats = senderStats.get(thread.email.toLowerCase());
+    if (!stats) return undefined;
+    let best: { bucketId: string; count: number } | undefined;
+    for (const [bucketId, count] of stats) {
+      if (!best || count > best.count) best = { bucketId, count };
+    }
+    return best && best.count >= 2 ? best : undefined;
   }
 
   function settleFailed(threadId: string, error: ApiErrorBody["error"]) {
@@ -275,6 +375,7 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
       const hints = feedback
         .filter((hint) => hint.subject !== thread.subject)
         .slice(0, MAX_FEEDBACK_HINTS);
+      const senderPrior = senderPriorFor(thread);
       const body: TriageRequest = {
         thread: {
           id: thread.id,
@@ -286,10 +387,13 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
           listUnsubscribe: thread.listUnsubscribe,
           excerpt: thread.excerpt,
           messageCount: thread.messageCount,
+          userReplied: thread.userReplied,
+          senderDomainRelation: thread.senderDomainRelation,
         },
         taxonomy: currentTaxonomy,
         taxonomyVersion,
         ...(hints.length ? { feedback: hints } : {}),
+        ...(senderPrior ? { senderPrior } : {}),
       };
       const response = await fetchFn(endpoint, {
         method: "POST",
@@ -351,9 +455,119 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
     }
   }
 
+  /**
+   * Verifier second pass: adversarial check on a high-risk decision.
+   * Challenge flips to needs-review; failure leaves the decision standing
+   * (unverified) — verification is insurance, not a gate.
+   */
+  async function runVerify(threadId: string) {
+    const startedRunId = runId;
+    const task = tasks.get(threadId);
+    const thread = threads.get(threadId);
+    const currentTaxonomy = taxonomy;
+    if (!task || !thread || !task.decision || !task.meta || !currentTaxonomy) return;
+    setTask(threadId, { verifyAttempts: (task.verifyAttempts ?? 0) + 1 });
+    inFlight += 1;
+    notify();
+    try {
+      const body: TriageRequest = {
+        thread: {
+          id: thread.id,
+          sender: thread.sender,
+          email: thread.email,
+          subject: thread.subject,
+          date: thread.date,
+          gmailLabels: thread.gmailLabels,
+          listUnsubscribe: thread.listUnsubscribe,
+          excerpt: thread.excerpt,
+          messageCount: thread.messageCount,
+          userReplied: thread.userReplied,
+          senderDomainRelation: thread.senderDomainRelation,
+        },
+        taxonomy: currentTaxonomy,
+        taxonomyVersion,
+        mode: "verify",
+        decisionToVerify: task.decision,
+      };
+      const response = await fetchFn(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: abortController.signal,
+      });
+      if (startedRunId !== runId || stopped) return;
+
+      if (response.status === 429) {
+        schedulePause(parseRetryAfterMs(response));
+        const attempts = tasks.get(threadId)?.verifyAttempts ?? 1;
+        if (attempts >= 2) finalizeClassified(threadId, task.decision, task.meta, false);
+        else verifyQueue.push(threadId);
+        return;
+      }
+      if (!response.ok) {
+        const attempts = tasks.get(threadId)?.verifyAttempts ?? 1;
+        if (attempts >= 2) {
+          finalizeClassified(threadId, task.decision, task.meta, false);
+        } else {
+          await backoff(attempts);
+          if (startedRunId === runId && !stopped) verifyQueue.push(threadId);
+        }
+        return;
+      }
+
+      const payload = (await response.json()) as VerifyResponse;
+      if (payload.meta.taxonomyVersion !== taxonomyVersion) return;
+      recordCallTelemetry(payload.meta);
+
+      const verificationMeta = {
+        upheld: payload.verification.upheld,
+        model: payload.meta.model,
+        promptVersion: payload.meta.promptVersion,
+        latencyMs: payload.meta.latencyMs,
+        usage: payload.meta.usage,
+        costMicros: payload.meta.costMicros,
+      };
+      const mergedMeta: TriageMeta = { ...task.meta, verification: verificationMeta };
+      const mergedDecision: Decision = payload.verification.upheld
+        ? { ...task.decision, verified: true }
+        : {
+            ...task.decision,
+            needsReview: true,
+            ambiguityReasons: [
+              ...task.decision.ambiguityReasons,
+              `Verifier challenge: ${payload.verification.reason}`,
+              ...payload.verification.challengeEvidence.map((quote) => `“${quote}”`),
+            ],
+          };
+      finalizeClassified(threadId, mergedDecision, mergedMeta, false);
+    } catch (caught) {
+      if (stopped || startedRunId !== runId) return;
+      if (caught instanceof Error && caught.name === "AbortError") return;
+      const attempts = tasks.get(threadId)?.verifyAttempts ?? 1;
+      if (attempts >= 2) {
+        finalizeClassified(threadId, task.decision, task.meta, false);
+      } else {
+        await backoff(attempts);
+        if (startedRunId === runId && !stopped) verifyQueue.push(threadId);
+      }
+    } finally {
+      inFlight -= 1;
+      notify();
+      pump();
+      maybeResolveIdle();
+    }
+  }
+
   function pump() {
     if (stopped || !taxonomy || pausedUntil !== null || manuallyPaused) return;
     while (inFlight < concurrency) {
+      // Verifications first: they finish threads already in flight.
+      const verifyId = verifyQueue.find((id) => tasks.get(id)?.state === "verifying");
+      if (verifyId !== undefined) {
+        verifyQueue.splice(verifyQueue.indexOf(verifyId), 1);
+        void runVerify(verifyId);
+        continue;
+      }
       const threadId = queue.find((id) => tasks.get(id)?.state === "queued");
       if (threadId === undefined) break;
       queue.splice(queue.indexOf(threadId), 1);
@@ -392,6 +606,8 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
       manuallyPaused = false; // a new taxonomy is fresh intent to classify
       resetTelemetry();
       queue.length = 0;
+      verifyQueue.length = 0;
+      senderStats.clear(); // priors are keyed to the old taxonomy's buckets
       for (const [threadId] of tasks) {
         tasks.set(threadId, { threadId, state: "queued", attempts: 0 });
         queue.push(threadId);
@@ -402,6 +618,13 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
 
     enqueue(newThreads) {
       if (stopped) return;
+      // Breadth-first over senders: classify one thread per unseen sender
+      // before repeats, so sender priors cover the most later threads.
+      const seenSenders = new Set(
+        [...threads.values()].map((thread) => thread.email.toLowerCase()),
+      );
+      const firstOfSender: string[] = [];
+      const repeats: string[] = [];
       for (const thread of newThreads) {
         const known = threads.get(thread.id);
         threads.set(thread.id, thread);
@@ -410,8 +633,14 @@ export function createClassifyOrchestrator(deps: OrchestratorDeps = {}): Classif
           continue;
         }
         tasks.set(thread.id, { threadId: thread.id, state: "queued", attempts: 0 });
-        queue.push(thread.id);
+        const email = thread.email.toLowerCase();
+        if (seenSenders.has(email)) repeats.push(thread.id);
+        else {
+          seenSenders.add(email);
+          firstOfSender.push(thread.id);
+        }
       }
+      queue.push(...firstOfSender, ...repeats);
       notify();
       pump();
     },

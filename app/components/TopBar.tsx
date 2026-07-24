@@ -127,7 +127,7 @@ export function TopBar({
             <div className="menu-popover" role="menu">
               <div className="menu-identity">
                 <strong>{mode === "gmail" ? (email ?? "Google connected") : "Demo inbox"}</strong>
-                <span>{mode === "gmail" ? "gmail.readonly" : "48 fixture threads"}</span>
+                <span>{mode === "gmail" ? "gmail.readonly" : "50 fixture threads"}</span>
               </div>
               <div className="menu-section mono">Theme</div>
               {THEME_OPTIONS.map(({ id, label, icon: Icon }) => (

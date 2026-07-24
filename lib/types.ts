@@ -10,7 +10,10 @@ export const GMAIL_FETCH_CONCURRENCY = 5;
 export const CLASSIFY_CONCURRENCY = 8;
 export const EXCERPT_BUDGET = 1_200;
 export const MAX_TAXONOMY_BUCKETS = 20;
-export const PROMPT_VERSION = "triage-v5";
+export const PROMPT_VERSION = "triage-v6";
+export const VERIFY_PROMPT_VERSION = "verify-v1";
+/** Buckets whose loss is expensive; used by verification triggers. */
+export const HIGH_STAKES_BUCKETS = ["important", "escalations", "review"] as const;
 
 export type TaxonomyBucket = {
   id: string;
@@ -36,6 +39,9 @@ export type ThreadSummary = {
   messageCount: number;
   /** Version key: changes iff a new message arrives on the thread. */
   latestMessageId: string;
+  /** True when any message in the thread is from the connected account. */
+  userReplied: boolean;
+  senderDomainRelation: "same-domain" | "external";
 };
 
 export type ThreadsResponse = {
@@ -76,6 +82,25 @@ export type Decision = {
   evidence: string[];
   ambiguityReasons: string[];
   needsReview: boolean;
+  /** Set client-side when the risk verifier reviewed and upheld this decision. */
+  verified?: boolean;
+};
+
+/** Result of the adversarial second-pass check on a high-risk decision. */
+export type VerificationResult = {
+  upheld: boolean;
+  /** Verbatim-grounded quotes supporting the challenge (empty when upheld). */
+  challengeEvidence: string[];
+  reason: string;
+};
+
+export type VerificationMeta = {
+  upheld: boolean;
+  model: string;
+  promptVersion: string;
+  latencyMs: number;
+  usage: TriageUsage | null;
+  costMicros: number | null;
 };
 
 export type TriageUsage = {
@@ -97,6 +122,8 @@ export type TriageMeta = {
   taxonomyVersion: string;
   /** Set client-side when the decision came from the local cache. */
   cached?: boolean;
+  /** Present when the risk verifier ran for this thread (merged client-side). */
+  verification?: VerificationMeta;
 };
 
 /** A past manual correction, sent as a hint — never an override. */
@@ -119,11 +146,24 @@ export type TriageRequest = {
     listUnsubscribe: boolean;
     excerpt: string;
     messageCount: number;
+    userReplied?: boolean;
+    senderDomainRelation?: "same-domain" | "external";
   };
   taxonomy: TaxonomyBucket[];
   taxonomyVersion: string;
   /** Recent user corrections (<= MAX_FEEDBACK_HINTS), excluding this thread. */
   feedback?: FeedbackHint[];
+  /** Corpus-structure hint: how this sender's other threads were classified. */
+  senderPrior?: { bucketId: string; count: number };
+  /** "verify" runs the adversarial second pass on decisionToVerify. */
+  mode?: "classify" | "verify";
+  decisionToVerify?: Decision;
+};
+
+export type VerifyResponse = {
+  threadId: string;
+  verification: VerificationResult;
+  meta: TriageMeta;
 };
 
 export type TriageResponse = {

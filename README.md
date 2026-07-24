@@ -45,6 +45,37 @@ Design positions worth knowing before reading the code:
   are aborted and stale responses discarded when it changes. Decisions cache locally keyed by
   `(promptVersion, taxonomyVersion, threadId, latestMessageId)`, so reloads and unchanged
   threads are free.
+- **High-risk decisions get a second, adversarial pass.** Auto-archive verdicts and
+  low-priority calls with a high-stakes runner-up go to a risk verifier whose only job is to
+  argue the case *against* hiding the thread, with verbatim evidence. A challenge is never
+  averaged away — it flips the thread to Needs review with the challenge quotes attached;
+  concurrence marks the decision verified. Disagreement becomes visible doubt, not fake
+  confidence.
+- **The pipeline uses corpus structure, not just isolated threads.** Once a sender has two
+  settled classifications, later threads carry that prior as a labeled hint (judged on
+  merits, never overridden); threads are processed breadth-first across senders to maximize
+  prior coverage. Deterministic signals — did the user already reply, is the sender in the
+  user's own domain, bulk-mail headers — ride alongside the untrusted text.
+
+## Measured quality (`npm run eval`)
+
+The eval harness runs the demo corpus through the **production endpoint and the production
+client orchestrator** (verifier included) against 32 hand-labeled golden expectations,
+including two adversarial fixtures. Latest run (kimi-k3, triage-v6):
+
+| Metric | Result |
+| --- | --- |
+| Golden pass rate | **31/32 (97%)** |
+| Important-thread recall | **5/5** |
+| False auto-archive (important hidden, unflagged) | **0** |
+| Prompt-injection email obeyed | **No** — landed auto-archive, flagged for review |
+| Spoofed "security alert" | Held for review |
+| Risk verifier | triggered 16/50 (32%), 2 challenges |
+| Latency / cost | p50 8.4s, p95 14.0s · $0.23 for the full 50-thread pass |
+
+The one miss is a dentist-appointment confirmation classified `important` (we label it
+`wait`) — a defensible read, kept as an honest miss rather than widening the label to
+manufacture 100%.
 
 ## Running it
 

@@ -113,7 +113,11 @@ async function fetchThreadDetails(ids: string[], accessToken: string) {
   return { results, skipped };
 }
 
-function normalizeThread(thread: GmailThread): ThreadSummary | null {
+function emailDomain(address: string) {
+  return address.split("@")[1]?.toLowerCase() ?? "";
+}
+
+function normalizeThread(thread: GmailThread, selfEmail: string | undefined): ThreadSummary | null {
   if (!thread.id) return null;
   const messages = [...(thread.messages ?? [])].sort(
     (a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0),
@@ -125,6 +129,17 @@ function normalizeThread(thread: GmailThread): ThreadSummary | null {
   const from = parseSender(headerValue(headers, "From"));
   const timestamp = Number(latest.internalDate ?? Date.now());
   const snippet = cleanSnippet(latest.snippet ?? "");
+
+  const self = selfEmail?.toLowerCase();
+  const userReplied = Boolean(
+    self &&
+      messages.some((message) => {
+        const sender = parseSender(headerValue(message.payload?.headers, "From"));
+        return sender.email.toLowerCase() === self;
+      }),
+  );
+  const senderDomainRelation =
+    self && emailDomain(from.email) === emailDomain(self) ? "same-domain" : "external";
 
   const latestText = latest.payload ? extractMessageText(latest.payload) : "";
   const previousText = previous?.payload ? extractMessageText(previous.payload) : null;
@@ -143,6 +158,8 @@ function normalizeThread(thread: GmailThread): ThreadSummary | null {
     listUnsubscribe: Boolean(headerValue(headers, "List-Unsubscribe")),
     messageCount: messages.length,
     latestMessageId: latest.id ?? `${thread.id}-latest`,
+    userReplied,
+    senderDomainRelation,
   };
 }
 
@@ -197,7 +214,7 @@ export async function GET(request: Request) {
   const threads = ids
     .map((id) => results.get(id))
     .filter((thread): thread is GmailThread => Boolean(thread))
-    .map(normalizeThread)
+    .map((thread) => normalizeThread(thread, session.email))
     .filter((thread): thread is ThreadSummary => Boolean(thread));
 
   const payload: ThreadsResponse = {
