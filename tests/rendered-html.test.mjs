@@ -31,8 +31,6 @@ test("server-renders the Inbox Concierge shell", async () => {
   assert.match(html, /<title>Inbox Concierge — Trustworthy AI inbox triage<\/title>/i);
   assert.match(html, /Inbox Concierge/);
   assert.match(html, /tenex\.theme\.v1/); // pre-hydration theme script shipped
-  assert.doesNotMatch(
-    html,
-    /react-loading-skeleton|Snapshot ready|sha256:/i,
-  );
+  // Guard against fabricated-telemetry regressions and render artifacts.
+  assert.doesNotMatch(html, /sha256:|Schema valid|\[object Object\]|>undefined</i);
 });
