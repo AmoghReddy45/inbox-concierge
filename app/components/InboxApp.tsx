@@ -519,7 +519,8 @@ export function InboxApp() {
             buckets.find((candidate) => candidate.id === effectiveBucketId(openThread.id)) ?? null
           }
           needsReview={needsReview(openThread.id)}
-          voiceProfile={voice.state.stored?.profile ?? null}
+          voiceStored={voice.state.stored}
+          sessionEmail={threadsState.email ?? status.email}
           onOpenWhy={() => setPanel({ open: true, correcting: false })}
           onClose={() => setOpenThreadId(null)}
           onNavigate={navigateThread}

@@ -58,6 +58,26 @@ export function computeReplyLikelihood(
   return { level: "unknown", note: "No measured reply behavior for this situation." };
 }
 
+/**
+ * Draft-input excerpt: the latest message in full (budgeted) plus brief
+ * one-line context for up to four earlier messages. <= 2,400 chars.
+ */
+export function buildDraftExcerpt(
+  messages: Array<{ sender: string; date: string; text: string }>,
+): string {
+  if (!messages.length) return "";
+  const latest = messages[messages.length - 1];
+  const lines: string[] = [];
+  for (const message of messages.slice(0, -1).slice(-4)) {
+    lines.push(
+      `[${message.sender} · ${message.date.slice(0, 10)}] ${message.text.replace(/\s+/g, " ").slice(0, 160)}`,
+    );
+  }
+  lines.push(`[LATEST · ${latest.sender} · ${latest.date.slice(0, 10)}]`);
+  lines.push(latest.text.slice(0, 1_800));
+  return lines.join("\n").slice(0, 2_400);
+}
+
 /** Score: +3 same situation, +2 same internal/external side, +1 recent half. */
 export function matchExemplars(
   profile: VoiceProfile,

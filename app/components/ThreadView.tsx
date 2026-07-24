@@ -4,10 +4,11 @@ import { ArrowLeft, ChevronDown, ChevronUp, CircleAlert, Eye } from "lucide-reac
 import { useState } from "react";
 import type { Bucket } from "../../lib/taxonomy";
 import type { ThreadSummary } from "../../lib/types";
-import type { VoiceProfile } from "../../lib/voice-types";
+import type { StoredVoiceProfile } from "../../lib/voice-types";
 import { formatRowTime } from "../lib/format";
 import { computeReplyLikelihood, detectThreadSituation } from "../lib/exemplar-match";
 import type { ThreadDetailState } from "../hooks/useThreadDetail";
+import { DraftCard } from "./DraftCard";
 import { MessageBody } from "./MessageBody";
 
 type Props = {
@@ -15,7 +16,8 @@ type Props = {
   detailState: ThreadDetailState;
   bucket: Bucket | null;
   needsReview: boolean;
-  voiceProfile: VoiceProfile | null;
+  voiceStored: StoredVoiceProfile | null;
+  sessionEmail: string | null;
   onOpenWhy: () => void;
   onClose: () => void;
   onNavigate: (direction: 1 | -1) => void;
@@ -31,7 +33,8 @@ export function ThreadView({
   detailState,
   bucket,
   needsReview,
-  voiceProfile,
+  voiceStored,
+  sessionEmail,
   onOpenWhy,
   onClose,
   onNavigate,
@@ -45,8 +48,9 @@ export function ThreadView({
   const lastId = messages[messages.length - 1]?.id;
   const isExpanded = (id: string) => id === lastId || expanded.has(id);
 
-  const likelihood = voiceProfile
-    ? computeReplyLikelihood(detectThreadSituation(thread, bucket?.id ?? null), voiceProfile)
+  const situation = detectThreadSituation(thread, bucket?.id ?? null);
+  const likelihood = voiceStored
+    ? computeReplyLikelihood(situation, voiceStored.profile)
     : null;
 
   return (
@@ -141,6 +145,16 @@ export function ThreadView({
                 <span className="likelihood-dot" aria-hidden="true" />
                 {likelihood.note}
               </p>
+              {voiceStored && situation !== "bulk" && (
+                <DraftCard
+                  thread={thread}
+                  messages={messages}
+                  sessionEmail={sessionEmail}
+                  bucketId={bucket?.id ?? null}
+                  stored={voiceStored}
+                  situation={situation}
+                />
+              )}
             </div>
           )}
         </div>
