@@ -10,6 +10,7 @@ import { useThreadDetail } from "../hooks/useThreadDetail";
 import { useThreads, type ThreadSource } from "../hooks/useThreads";
 import { useToast } from "../hooks/useToast";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useVoiceProfile } from "../hooks/useVoiceProfile";
 import { formatCost } from "../lib/format";
 import type { TriageStatusResponse } from "../../lib/types";
 import { BucketModal } from "./BucketModal";
@@ -22,6 +23,8 @@ import { ThreadList } from "./ThreadList";
 import { ThreadView } from "./ThreadView";
 import { Toast } from "./Toast";
 import { TopBar } from "./TopBar";
+import { VoiceOnboarding } from "./VoiceOnboarding";
+import { VoiceProfileSheet } from "./VoiceProfileSheet";
 
 type Correction = { bucketId: string; latestMessageId: string; correctedAt: number };
 
@@ -106,6 +109,8 @@ export function InboxApp() {
   const [bucketModalOpen, setBucketModalOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [voiceModal, setVoiceModal] = useState<null | "onboarding" | "sheet">(null);
+  const voice = useVoiceProfile(source, classifier.configured);
   const undoStack = useRef<Array<{ threadId: string; previous: Correction | null }>>([]);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const helpRef = useFocusTrap<HTMLDivElement>(helpOpen);
@@ -316,14 +321,35 @@ export function InboxApp() {
     });
   }, [showToast]);
 
+  const voiceLearning =
+    voice.state.progress !== null && voice.state.progress.stage !== "done";
+
+  const closeVoiceModal = useCallback(() => {
+    voice.acknowledge();
+    setVoiceModal(null);
+  }, [voice]);
+
   const closeTopmost = useCallback(() => {
     if (paletteOpen) setPaletteOpen(false);
     else if (helpOpen) setHelpOpen(false);
     else if (bucketModalOpen) setBucketModalOpen(false);
-    else if (panel.open) setPanel({ open: false, correcting: false });
+    else if (voiceModal) {
+      // A running learn job keeps its modal — progress must stay visible.
+      if (!voiceLearning) closeVoiceModal();
+    } else if (panel.open) setPanel({ open: false, correcting: false });
     else if (openThreadId) setOpenThreadId(null);
     else if (query) setQuery("");
-  }, [bucketModalOpen, helpOpen, openThreadId, paletteOpen, panel.open, query]);
+  }, [
+    bucketModalOpen,
+    closeVoiceModal,
+    helpOpen,
+    openThreadId,
+    paletteOpen,
+    panel.open,
+    query,
+    voiceLearning,
+    voiceModal,
+  ]);
 
   const tabOrder = useMemo(() => [...buckets.map((bucket) => bucket.id), "all"], [buckets]);
 
@@ -394,6 +420,21 @@ export function InboxApp() {
             },
           ]
         : []),
+      ...(voice.state.stored
+        ? [
+            {
+              id: "voice-profile",
+              label: "Voice profile (measured)",
+              run: () => setVoiceModal("sheet"),
+            },
+          ]
+        : [
+            {
+              id: "voice-learn",
+              label: "Learn my voice (reply drafts)",
+              run: () => setVoiceModal("onboarding"),
+            },
+          ]),
       {
         id: "theme",
         label: `Theme: switch to ${theme === "carbon" ? "Snow" : "Carbon"}`,
@@ -401,7 +442,7 @@ export function InboxApp() {
       },
       { id: "help", label: "Keyboard shortcuts", hint: "?", run: () => setHelpOpen(true) },
     ],
-    [buckets, failedCount, openThreadAt, retryFailed, selectedThread, setTheme, theme],
+    [buckets, failedCount, openThreadAt, retryFailed, selectedThread, setTheme, theme, voice.state.stored],
   );
 
   // --- render
@@ -521,6 +562,35 @@ export function InboxApp() {
           threadCount={threadsState.threads.length}
           onCreate={handleCreateBucket}
           onClose={() => setBucketModalOpen(false)}
+        />
+      )}
+
+      {voiceModal === "onboarding" && source && (
+        <VoiceOnboarding
+          mode={source}
+          llmConfigured={classifier.configured}
+          state={voice.state}
+          onStart={voice.start}
+          onResume={voice.resumeLearn}
+          onClose={closeVoiceModal}
+          onViewProfile={() => {
+            voice.acknowledge();
+            setVoiceModal("sheet");
+          }}
+        />
+      )}
+
+      {voiceModal === "sheet" && voice.state.stored && (
+        <VoiceProfileSheet
+          stored={voice.state.stored}
+          stale={voice.state.stale}
+          onRebuild={() => setVoiceModal("onboarding")}
+          onClear={() => {
+            voice.clear();
+            setVoiceModal(null);
+            showToast("Voice profile deleted from this browser");
+          }}
+          onClose={() => setVoiceModal(null)}
         />
       )}
 

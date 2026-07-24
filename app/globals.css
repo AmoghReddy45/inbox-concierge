@@ -1325,3 +1325,133 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- voice profile (learn + sheet) ---------- */
+
+.voice-modal { width: min(480px, 100%); }
+.voice-sheet {
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  max-height: min(84dvh, 720px);
+}
+
+.voice-stage { display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 18px; }
+.voice-lede { margin: 0; font-size: 13px; line-height: 1.55; color: var(--ink); }
+.voice-detail { margin: 0; font-size: 11.5px; color: var(--ink-3); }
+.voice-error {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.voice-points { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.voice-points li { font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.voice-stage > footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+
+.voice-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.voice-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand);
+  transition: width 320ms var(--ease-out);
+}
+
+.voice-facts { display: flex; gap: 22px; margin: 0; }
+.voice-facts div { display: flex; flex-direction: column; gap: 2px; }
+.voice-facts dt { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); }
+.voice-facts dd { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+
+.voice-meta { margin: 6px 20px 0; font-size: 11px; color: var(--ink-3); }
+.voice-stale-chip {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 2px;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: 10.5px;
+  text-transform: lowercase;
+}
+
+.voice-sheet-body {
+  overflow-y: auto;
+  padding: 10px 20px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.voice-sheet-body section { display: flex; flex-direction: column; gap: 6px; }
+.voice-sheet-body h3 {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+}
+.voice-sheet-body p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+.voice-muted { color: var(--ink-3) !important; }
+.voice-sig {
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.voice-axes { display: flex; flex-direction: column; gap: 6px; }
+.voice-axis { display: grid; grid-template-columns: 80px 1fr 44px; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-2); }
+.voice-axis .mono { text-align: right; font-size: 11px; color: var(--ink-3); }
+.voice-axis-track { height: 4px; border-radius: 999px; background: var(--surface); overflow: hidden; }
+.voice-axis-fill { height: 100%; border-radius: 999px; background: var(--brand); }
+.voice-inventory { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.voice-inventory li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+.voice-inventory code, .voice-sheet-body code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+.voice-inventory .mono { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.voice-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.voice-list li { font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+.voice-toggle {
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand);
+}
+.voice-toggle:hover { text-decoration: underline; }
+.voice-exemplars { display: flex; flex-direction: column; gap: 10px; }
+.voice-exemplars figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.voice-exemplars figcaption { font-size: 10.5px; color: var(--ink-3); }
+.voice-exemplars pre {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.voice-sheet > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 8px;
+}

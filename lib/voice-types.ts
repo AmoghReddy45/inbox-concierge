@@ -61,6 +61,78 @@ export type SentProbeResponse = {
   newestSentAt: string | null;
 };
 
+/** One sample as submitted to the observe phase — body already tier-budgeted. */
+export type DistillSample = {
+  id: string;
+  tier: "newest" | "middle" | "oldest";
+  sentAt: string;
+  kind: "reply" | "fresh" | "forward";
+  subject: string;
+  body: string;
+  internal: boolean;
+  parentSender?: string;
+  /** Untrusted third-party text. */
+  parentExcerpt?: string;
+};
+
+/** Model-authored field notes from one observe chunk — descriptive only, no numbers. */
+export type PartialObservation = {
+  toneNotes: string[];
+  greetingCandidates: string[];
+  signoffCandidates: string[];
+  quirks: string[];
+  contextObservations: string[];
+  exemplarCandidates: Array<{ sampleId: string; situation: string; parentGist: string }>;
+  driftNotes: string[];
+};
+
+export type VoiceCallMeta = {
+  model: string;
+  promptVersion: string;
+  latencyMs: number;
+  usage: TriageUsage | null;
+  costMicros: number | null;
+};
+
+export type ObserveRequest = {
+  phase: "observe";
+  chunkIndex: number;
+  chunkCount: number;
+  samples: DistillSample[];
+};
+
+export type ObserveResponse = { observation: PartialObservation; meta: VoiceCallMeta };
+
+/** Sample submitted to merge for verbatim exemplar extraction (body ≤ 1,500 chars). */
+export type MergeSample = {
+  id: string;
+  /** Recency rank, 0 = newest — the exemplar floor is enforced against this. */
+  rank: number;
+  sentAt: string;
+  internal: boolean;
+  body: string;
+  parentSender?: string;
+};
+
+/** Client-measured ground truth. The model never alters these numbers. */
+export type CodeStats = {
+  corpus: VoiceProfile["corpus"];
+  signature: string | null;
+  greetings: VoiceProfile["greetings"];
+  signoffs: VoiceProfile["signoffs"];
+  length: VoiceProfile["length"];
+  replyBehavior: VoiceProfile["replyBehavior"];
+};
+
+export type MergeRequest = {
+  phase: "merge";
+  partials: PartialObservation[];
+  stats: CodeStats;
+  samples: MergeSample[];
+};
+
+export type MergeResponse = { profile: VoiceProfile; meta: VoiceCallMeta };
+
 export type VoiceContextMode = {
   id: string;
   /** Plain-language trigger, e.g. "a colleague asks for a decision". */
@@ -108,7 +180,7 @@ export type VoiceProfile = {
   contexts: VoiceContextMode[];
   exemplars: VoiceExemplar[];
   replyBehavior: {
-    respondsTo: Array<{ situation: string; share: number; typicalLatency: string }>;
+    respondsTo: Array<{ situation: string; share: number; typicalLatency: string; count: number }>;
     /** Situations with zero observed replies — absence of evidence, not prediction. */
     neverObserved: string[];
   };
