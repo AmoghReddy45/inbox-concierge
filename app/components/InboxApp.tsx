@@ -268,6 +268,20 @@ export function InboxApp() {
   const openThread = openThreadId ? (threadById.get(openThreadId) ?? null) : null;
   const detailState = useThreadDetail(openThread ? openThread.id : null, source);
 
+  // Everything already loaded from this sender — the panel costs zero fetches.
+  const senderThreads = useMemo(() => {
+    if (!openThread) return [];
+    const address = openThread.email.toLowerCase();
+    return threadsState.threads
+      .filter((thread) => thread.email.toLowerCase() === address)
+      .map((thread) =>
+        thread.unread && localReads.get(thread.id) === thread.latestMessageId
+          ? { ...thread, unread: false }
+          : thread,
+      )
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [localReads, openThread, threadsState.threads]);
+
   const openThreadAt = useCallback(
     (threadId: string) => {
       setSelectedId(threadId);
@@ -579,6 +593,10 @@ export function InboxApp() {
           needsReview={needsReview(openThread.id)}
           voiceStored={voice.state.stored}
           sessionEmail={threadsState.email ?? status.email}
+          senderThreads={senderThreads}
+          buckets={buckets}
+          effectiveBucketId={effectiveBucketId}
+          onOpenThread={openThreadAt}
           onOpenWhy={() => setPanel({ open: true, correcting: false })}
           onClose={() => setOpenThreadId(null)}
           onNavigate={navigateThread}

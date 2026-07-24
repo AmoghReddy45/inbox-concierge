@@ -10,6 +10,7 @@ import { computeReplyLikelihood, detectThreadSituation } from "../lib/exemplar-m
 import type { ThreadDetailState } from "../hooks/useThreadDetail";
 import { DraftCard } from "./DraftCard";
 import { MessageBody } from "./MessageBody";
+import { SenderPanel } from "./SenderPanel";
 
 type Props = {
   thread: ThreadSummary;
@@ -18,6 +19,11 @@ type Props = {
   needsReview: boolean;
   voiceStored: StoredVoiceProfile | null;
   sessionEmail: string | null;
+  /** Every loaded thread from this sender, newest first (includes this one). */
+  senderThreads: ThreadSummary[];
+  buckets: Bucket[];
+  effectiveBucketId: (threadId: string) => string | null;
+  onOpenThread: (threadId: string) => void;
   onOpenWhy: () => void;
   onClose: () => void;
   onNavigate: (direction: 1 | -1) => void;
@@ -35,6 +41,10 @@ export function ThreadView({
   needsReview,
   voiceStored,
   sessionEmail,
+  senderThreads,
+  buckets,
+  effectiveBucketId,
+  onOpenThread,
   onOpenWhy,
   onClose,
   onNavigate,
@@ -97,8 +107,9 @@ export function ThreadView({
         </div>
       </header>
 
-      <div className="thread-view-scroll">
-        <div className="thread-view-column">
+      <div className="thread-view-body">
+        <div className="thread-view-scroll">
+          <div className="thread-view-column">
           {loading && (
             <div className="message-card is-skeleton-card" aria-hidden="true">
               <span className="skeleton-block" style={{ width: 180 }} />
@@ -167,7 +178,18 @@ export function ThreadView({
               )}
             </div>
           )}
+          </div>
         </div>
+
+        <SenderPanel
+          sender={thread.sender}
+          email={thread.email}
+          senderThreads={senderThreads}
+          currentThreadId={thread.id}
+          buckets={buckets}
+          effectiveBucketId={effectiveBucketId}
+          onOpenThread={onOpenThread}
+        />
       </div>
     </div>
   );

@@ -16,7 +16,9 @@ traceable to a measured number.
 
 Built for the Tenex take-home. The UI is a deliberate recreation of Superhuman's
 split-inbox language (their "Snow" and "Carbon" themes included), with the decision
-transparency layered on top.
+transparency layered on top — down to the contact rail: opening a thread shows every
+loaded conversation with that sender and how each was classified, at zero extra fetches
+(the same history the classifier uses as its sender prior, made visible).
 
 ## How it works
 
