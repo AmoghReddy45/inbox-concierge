@@ -1576,3 +1576,37 @@ kbd {
   resize: vertical;
 }
 .voice-sig-edit textarea:focus-visible { border-color: var(--brand); outline: none; }
+
+/* ---------- bottom hint bar (Superhuman posture) ---------- */
+
+.hint-bar {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  padding: 7px 16px 8px;
+  border-top: 1px solid var(--hairline);
+  background: var(--ground);
+  flex: 0 0 auto;
+  user-select: none;
+}
+.hint {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+}
+.hint kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--ink-2);
+}
+@media (max-width: 719px) {
+  .hint-bar { display: none; }
+}

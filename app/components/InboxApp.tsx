@@ -17,6 +17,7 @@ import { BucketModal } from "./BucketModal";
 import { CommandPalette, type Command } from "./CommandPalette";
 import { ConnectScreen } from "./ConnectScreen";
 import { DecisionPanel } from "./DecisionPanel";
+import { HintBar } from "./HintBar";
 import { LoadingSplash } from "./LoadingSplash";
 import { ProgressStrip } from "./ProgressStrip";
 import { ThreadList } from "./ThreadList";
@@ -645,6 +646,11 @@ export function InboxApp() {
           </div>
         </div>
       )}
+
+      <HintBar
+        context={openThread ? "thread" : "list"}
+        canDraft={Boolean(voice.state.stored) && !voice.state.stored?.meta.heuristicOnly}
+      />
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>
