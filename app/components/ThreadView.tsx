@@ -4,7 +4,9 @@ import { ArrowLeft, ChevronDown, ChevronUp, CircleAlert, Eye } from "lucide-reac
 import { useState } from "react";
 import type { Bucket } from "../../lib/taxonomy";
 import type { ThreadSummary } from "../../lib/types";
+import type { VoiceProfile } from "../../lib/voice-types";
 import { formatRowTime } from "../lib/format";
+import { computeReplyLikelihood, detectThreadSituation } from "../lib/exemplar-match";
 import type { ThreadDetailState } from "../hooks/useThreadDetail";
 import { MessageBody } from "./MessageBody";
 
@@ -13,6 +15,7 @@ type Props = {
   detailState: ThreadDetailState;
   bucket: Bucket | null;
   needsReview: boolean;
+  voiceProfile: VoiceProfile | null;
   onOpenWhy: () => void;
   onClose: () => void;
   onNavigate: (direction: 1 | -1) => void;
@@ -28,6 +31,7 @@ export function ThreadView({
   detailState,
   bucket,
   needsReview,
+  voiceProfile,
   onOpenWhy,
   onClose,
   onNavigate,
@@ -40,6 +44,10 @@ export function ThreadView({
   const messages = detail?.messages ?? [];
   const lastId = messages[messages.length - 1]?.id;
   const isExpanded = (id: string) => id === lastId || expanded.has(id);
+
+  const likelihood = voiceProfile
+    ? computeReplyLikelihood(detectThreadSituation(thread, bucket?.id ?? null), voiceProfile)
+    : null;
 
   return (
     <div className="thread-view" aria-label={`Thread: ${thread.subject}`}>
@@ -125,6 +133,15 @@ export function ThreadView({
                 </time>
               </button>
             ),
+          )}
+
+          {likelihood && !loading && messages.length > 0 && (
+            <div className="draft-zone">
+              <p className={`likelihood-chip likelihood-${likelihood.level}`}>
+                <span className="likelihood-dot" aria-hidden="true" />
+                {likelihood.note}
+              </p>
+            </div>
           )}
         </div>
       </div>
