@@ -69,6 +69,39 @@ export async function unseal<T>(value: string | undefined): Promise<T | null> {
   }
 }
 
+/** Refresh the access token when <60s of validity remains; null = reauth needed. */
+export async function refreshGoogleSession(session: GoogleSession): Promise<GoogleSession | null> {
+  if (session.expiresAt > Date.now() + 60_000) return session;
+  if (!session.refreshToken) return null;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: session.refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!response.ok) return null;
+  const tokens = (await response.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    scope?: string;
+  };
+  if (!tokens.access_token) return null;
+  return {
+    ...session,
+    accessToken: tokens.access_token,
+    expiresAt: Date.now() + Math.max(60, tokens.expires_in ?? 3600) * 1000,
+    scope: tokens.scope ?? session.scope,
+  };
+}
+
 export function randomToken(size = 32) {
   return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(size)));
 }

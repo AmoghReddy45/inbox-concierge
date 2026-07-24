@@ -22,7 +22,7 @@ async function render() {
   );
 }
 
-test("server-renders the Inbox Concierge workspace", async () => {
+test("server-renders the Inbox Concierge shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -30,9 +30,9 @@ test("server-renders the Inbox Concierge workspace", async () => {
   const html = await response.text();
   assert.match(html, /<title>Inbox Concierge — Trustworthy AI inbox triage<\/title>/i);
   assert.match(html, /Inbox Concierge/);
-  assert.match(html, /Snapshot ready/);
-  assert.match(html, /Needs review/);
-  assert.match(html, /No changes were made in Gmail/);
-  assert.doesNotMatch(html, /react-loading-skeleton/i);
+  assert.match(html, /tenex\.theme\.v1/); // pre-hydration theme script shipped
+  assert.doesNotMatch(
+    html,
+    /react-loading-skeleton|Snapshot ready|sha256:/i,
+  );
 });
-
