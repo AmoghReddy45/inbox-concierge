@@ -427,6 +427,15 @@ export function InboxApp() {
               label: "Voice profile (measured)",
               run: () => setVoiceModal("sheet"),
             },
+            ...(voice.state.stale
+              ? [
+                  {
+                    id: "voice-rebuild",
+                    label: "Rebuild voice profile (new sent mail since)",
+                    run: () => setVoiceModal("onboarding"),
+                  },
+                ]
+              : []),
           ]
         : [
             {
@@ -442,7 +451,7 @@ export function InboxApp() {
       },
       { id: "help", label: "Keyboard shortcuts", hint: "?", run: () => setHelpOpen(true) },
     ],
-    [buckets, failedCount, openThreadAt, retryFailed, selectedThread, setTheme, theme, voice.state.stored],
+    [buckets, failedCount, openThreadAt, retryFailed, selectedThread, setTheme, theme, voice.state.stale, voice.state.stored],
   );
 
   // --- render
@@ -488,6 +497,9 @@ export function InboxApp() {
           onThemeChange={setTheme}
           onSwitchToDemo={() => setSource("demo")}
           onDisconnect={handleDisconnect}
+          voiceLabel={voice.state.stored ? "Voice profile" : "Learn my voice"}
+          voiceStale={voice.state.stale}
+          onVoice={() => setVoiceModal(voice.state.stored ? "sheet" : "onboarding")}
         />
       )}
 
@@ -593,6 +605,7 @@ export function InboxApp() {
             showToast("Voice profile deleted from this browser");
           }}
           onClose={() => setVoiceModal(null)}
+          onEdit={voice.applyEdit}
         />
       )}
 

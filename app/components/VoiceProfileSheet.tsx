@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { StoredVoiceProfile } from "../../lib/voice-types";
+import { THIN_CORPUS_THRESHOLD, type StoredVoiceProfile, type VoiceProfile } from "../../lib/voice-types";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { formatCost } from "../lib/format";
 
@@ -11,6 +11,8 @@ type Props = {
   onRebuild: () => void;
   onClear: () => void;
   onClose: () => void;
+  /** Persist a user edit; bumps revision and invalidates cached drafts. */
+  onEdit: (edit: (profile: VoiceProfile) => VoiceProfile) => void;
 };
 
 function pct(share: number) {
@@ -21,15 +23,24 @@ function contextLabel(context: "internal" | "external" | "any") {
   return context === "any" ? "everyone" : context;
 }
 
-/** The transparency payoff: the user's own measured voice, inspectable. */
-export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose }: Props) {
+/** The transparency payoff: the user's own measured voice, inspectable and editable. */
+export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose, onEdit }: Props) {
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   const [showExemplars, setShowExemplars] = useState(false);
+  const [signatureDraft, setSignatureDraft] = useState<string | null>(null);
   const { profile, meta } = stored;
   const builtDate = new Date(profile.builtAt).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
+  const thinCorpus = profile.corpus.sampleCount < THIN_CORPUS_THRESHOLD;
+
+  const saveSignature = () => {
+    if (signatureDraft === null) return;
+    const next = signatureDraft.trim() || null;
+    onEdit((current) => ({ ...current, signature: next }));
+    setSignatureDraft(null);
+  };
 
   return (
     <div className="overlay" role="presentation" onMouseDown={onClose}>
@@ -52,7 +63,13 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose }
           {meta.heuristicOnly
             ? "measured stats only (no model)"
             : `${meta.model} · ${meta.costMicros !== null ? formatCost(meta.costMicros) : "cost n/a"}`}
+          {stored.revision > 0 && ` · edited ×${stored.revision}`}
           {stale && <span className="voice-stale-chip">new sent mail since</span>}
+          {thinCorpus && (
+            <span className="voice-stale-chip">
+              thin corpus · only {profile.corpus.sampleCount} samples
+            </span>
+          )}
         </p>
 
         <div className="voice-sheet-body">
@@ -67,8 +84,32 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose }
           </section>
 
           <section>
-            <h3>Signature</h3>
-            {profile.signature ? (
+            <h3>
+              Signature
+              <button
+                type="button"
+                className="voice-edit-link"
+                onClick={() =>
+                  setSignatureDraft((open) => (open === null ? (profile.signature ?? "") : null))
+                }
+              >
+                {signatureDraft === null ? "Edit" : "Cancel"}
+              </button>
+            </h3>
+            {signatureDraft !== null ? (
+              <div className="voice-sig-edit">
+                <textarea
+                  value={signatureDraft}
+                  rows={3}
+                  aria-label="Signature appended to drafts"
+                  onChange={(event) => setSignatureDraft(event.target.value)}
+                  placeholder="Leave empty to append nothing"
+                />
+                <button type="button" className="button-secondary" onClick={saveSignature}>
+                  Save signature
+                </button>
+              </div>
+            ) : profile.signature ? (
               <pre className="voice-sig">{profile.signature}</pre>
             ) : (
               <p className="voice-muted">
@@ -223,6 +264,22 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose }
                     <figcaption className="mono">
                       {exemplar.situation} · {exemplar.internal ? "internal" : "external"}
                       {exemplar.parentGist ? ` · re: ${exemplar.parentGist}` : ""}
+                      {profile.exemplars.length > 2 && (
+                        <button
+                          type="button"
+                          className="voice-edit-link"
+                          onClick={() =>
+                            onEdit((current) => ({
+                              ...current,
+                              exemplars: current.exemplars.filter(
+                                (_, candidate) => candidate !== index,
+                              ),
+                            }))
+                          }
+                        >
+                          Exclude
+                        </button>
+                      )}
                     </figcaption>
                     <pre>{exemplar.body}</pre>
                   </figure>

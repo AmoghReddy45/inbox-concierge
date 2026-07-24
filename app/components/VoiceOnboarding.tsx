@@ -2,6 +2,7 @@
 
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { formatCost } from "../lib/format";
+import { THIN_CORPUS_THRESHOLD } from "../../lib/voice-types";
 import type { LearnProgress } from "../lib/voice-learn";
 import type { VoiceProfileState } from "../hooks/useVoiceProfile";
 
@@ -81,6 +82,12 @@ export function VoiceOnboarding({
                 ? " — measured statistics only (no model configured)."
                 : "."}
             </p>
+            {stored.profile.corpus.sampleCount < THIN_CORPUS_THRESHOLD && (
+              <p className="voice-detail">
+                Thin corpus: fewer than {THIN_CORPUS_THRESHOLD} usable messages — the measured
+                shares are real but noisy, and drafts will lean on fewer examples.
+              </p>
+            )}
             <dl className="voice-facts">
               <div>
                 <dt>Replies studied</dt>

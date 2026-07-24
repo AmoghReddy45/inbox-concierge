@@ -77,6 +77,40 @@ The one miss is a dentist-appointment confirmation classified `important` (we la
 `wait`) — a defensible read, kept as an honest miss rather than widening the label to
 manufacture 100%.
 
+## Reply drafts in your voice (beyond-spec extension)
+
+**Learn my voice** (⌘K or the account menu) reads your last ~200 sent messages — sent mail
+is readable under the same `gmail.readonly` scope, so the app still cannot write anything —
+and builds a voice profile where **code measures, the model describes**:
+
+- Every number is computed deterministically: signature detection (>40% trailing-block
+  share), greeting/sign-off inventories with real usage shares and an internal/external
+  split, median and p90 reply length, one-liner rate, and per-situation reply behavior
+  (what you answer, how fast). The LLM proposes candidate patterns and picks verbatim
+  exemplars of your own writing; any number it invents is overwritten by the measured one.
+- **Recency is enforced, not requested**: the newest 50 sends carry full bodies at 3×
+  weight (then 500 chars at 2×, 300 at 1×), and ≥70% of exemplars must come from the
+  newest 80 samples — a code-side floor applied after model selection.
+- Exemplars are referenced **by sample id** and extracted verbatim in code — the model
+  cannot fabricate "your" words. The whole profile is inspectable in-app (shares, quirks,
+  drift notes, exemplars), editable (exclude an exemplar, edit the signature — each edit
+  bumps a revision that invalidates cached drafts), and lives only in `localStorage`.
+
+Opening a thread then shows a **reply-likelihood chip before any spend** ("2 of your last
+32 replies answered escalation mail, typically within ~55m" — or that none did), computed
+from measured behavior. **Draft a reply (~$0.02)** (`r`) generates one draft on demand:
+profile-first prompt, situation-matched exemplars chosen by deterministic scoring (no
+embeddings), thread content in an untrusted fence. Validation enforces the measured length
+norm and drops any "why it sounds like you" claim that doesn't trace to a real profile
+element. The draft is editable; **copy is the only exit**. Fresh-corpus staleness is
+probed once per session (2 subrequests) and surfaces as a rebuild chip — never a silent
+rebuild, never silent spend. Without an API key, a free stats-only profile still builds,
+and drafting declines honestly rather than faking a template.
+
+Demo mode exercises the identical pipeline against an authored 38-message sent corpus with
+one recognizable voice; the measured profile ($0.04, ~50s) and drafts ($0.009) shown in
+the video are real calls.
+
 ## Running it
 
 Prereqs: Node ≥ 22.13.

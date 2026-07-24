@@ -1542,3 +1542,37 @@ kbd {
   font-size: 11px;
 }
 .draft-meta { margin: 0; font-size: 10.5px; color: var(--ink-3); }
+
+/* ---------- voice M5: edits + staleness ---------- */
+
+.chip-action { cursor: pointer; }
+.chip-action:hover { filter: brightness(0.96); }
+.menu-stale-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--warning-fg);
+  margin-left: auto;
+}
+.voice-edit-link {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand);
+}
+.voice-edit-link:hover { text-decoration: underline; }
+.voice-sig-edit { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.voice-sig-edit textarea {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--ground);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.voice-sig-edit textarea:focus-visible { border-color: var(--brand); outline: none; }

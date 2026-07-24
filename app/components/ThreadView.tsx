@@ -49,9 +49,14 @@ export function ThreadView({
   const isExpanded = (id: string) => id === lastId || expanded.has(id);
 
   const situation = detectThreadSituation(thread, bucket?.id ?? null);
-  const likelihood = voiceStored
-    ? computeReplyLikelihood(situation, voiceStored.profile)
-    : null;
+  const latestMessage = messages[messages.length - 1];
+  // When the user sent the last message the card offers a follow-up nudge;
+  // a "would you reply to this" chip makes no sense against your own mail.
+  const awaitingOthers = Boolean(
+    sessionEmail && latestMessage && latestMessage.email.toLowerCase() === sessionEmail.toLowerCase(),
+  );
+  const likelihood =
+    voiceStored && !awaitingOthers ? computeReplyLikelihood(situation, voiceStored.profile) : null;
 
   return (
     <div className="thread-view" aria-label={`Thread: ${thread.subject}`}>
@@ -139,13 +144,15 @@ export function ThreadView({
             ),
           )}
 
-          {likelihood && !loading && messages.length > 0 && (
+          {voiceStored && !loading && messages.length > 0 && (
             <div className="draft-zone">
-              <p className={`likelihood-chip likelihood-${likelihood.level}`}>
-                <span className="likelihood-dot" aria-hidden="true" />
-                {likelihood.note}
-              </p>
-              {voiceStored && situation !== "bulk" && (
+              {likelihood && (
+                <p className={`likelihood-chip likelihood-${likelihood.level}`}>
+                  <span className="likelihood-dot" aria-hidden="true" />
+                  {likelihood.note}
+                </p>
+              )}
+              {situation !== "bulk" && (
                 <DraftCard
                   thread={thread}
                   messages={messages}

@@ -7,6 +7,7 @@ import {
   LogOut,
   Monitor,
   Moon,
+  PenLine,
   RefreshCw,
   Search,
   Sun,
@@ -36,6 +37,10 @@ type Props = {
   onThemeChange: (theme: ThemePreference) => void;
   onSwitchToDemo: () => void;
   onDisconnect: () => void;
+  /** "Learn my voice" before a profile exists, "Voice profile" after. */
+  voiceLabel: string;
+  voiceStale: boolean;
+  onVoice: () => void;
 };
 
 const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; icon: typeof Sun }> = [
@@ -63,6 +68,9 @@ export function TopBar({
   onThemeChange,
   onSwitchToDemo,
   onDisconnect,
+  voiceLabel,
+  voiceStale,
+  onVoice,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -82,6 +90,11 @@ export function TopBar({
         <strong>Inbox Concierge</strong>
         {mode === "demo" && <span className="mode-chip">Demo inbox</span>}
         {!classifierConfigured && <span className="mode-chip chip-warning">Heuristic classifier</span>}
+        {voiceStale && (
+          <button type="button" className="mode-chip chip-warning chip-action" onClick={onVoice}>
+            New sent mail · voice profile is stale
+          </button>
+        )}
       </div>
 
       <BucketTabs
@@ -143,6 +156,18 @@ export function TopBar({
                   {theme === id && <Check size={13} className="menu-check" aria-hidden="true" />}
                 </button>
               ))}
+              <div className="menu-divider" />
+              <button
+                type="button"
+                className="menu-row"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onVoice();
+                }}
+              >
+                <PenLine size={14} aria-hidden="true" /> {voiceLabel}
+                {voiceStale && <span className="menu-stale-dot" aria-label="stale" />}
+              </button>
               <div className="menu-divider" />
               {mode === "gmail" ? (
                 <>

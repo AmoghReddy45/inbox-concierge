@@ -2,6 +2,7 @@ import {
   VOICE_PROMPT_VERSION,
   type SentProbeResponse,
   type StoredVoiceProfile,
+  type VoiceProfile,
 } from "../../lib/voice-types";
 
 const STORAGE_KEY = "tenex.voice.v1";
@@ -33,6 +34,17 @@ export function clearVoiceProfile(storage: Storage) {
   } catch {
     // ignore
   }
+}
+
+/**
+ * User edits (exemplar exclusion, signature change) bump the revision,
+ * which invalidates every cached draft keyed on it.
+ */
+export function withProfileEdit(
+  stored: StoredVoiceProfile,
+  edit: (profile: VoiceProfile) => VoiceProfile,
+): StoredVoiceProfile {
+  return { ...stored, profile: edit(stored.profile), revision: stored.revision + 1 };
 }
 
 /**

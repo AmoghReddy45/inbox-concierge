@@ -13,7 +13,9 @@ import {
   isProfileStale,
   loadVoiceProfile,
   saveVoiceProfile,
+  withProfileEdit,
 } from "../lib/voice-profile-store";
+import type { VoiceProfile } from "../../lib/voice-types";
 import type { ThreadSource } from "./useThreads";
 
 export type VoiceProfileState = {
@@ -117,6 +119,16 @@ export function useVoiceProfile(source: ThreadSource | null, llmConfigured: bool
     setError(null);
   }, []);
 
+  /** Persist a user edit (revision bump invalidates cached drafts). */
+  const applyEdit = useCallback((edit: (profile: VoiceProfile) => VoiceProfile) => {
+    setStored((current) => {
+      if (!current) return current;
+      const next = withProfileEdit(current, edit);
+      saveVoiceProfile(window.localStorage, next);
+      return next;
+    });
+  }, []);
+
   const state: VoiceProfileState = {
     stored,
     progress,
@@ -124,5 +136,5 @@ export function useVoiceProfile(source: ThreadSource | null, llmConfigured: bool
     canResume: checkpoint !== null,
     stale,
   };
-  return { state, start, resumeLearn, cancel, acknowledge, clear };
+  return { state, start, resumeLearn, cancel, acknowledge, clear, applyEdit };
 }
