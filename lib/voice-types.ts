@@ -170,6 +170,8 @@ export type VoiceProfile = {
     /** Raw probe head at build time — staleness compares probe-to-probe. */
     rawNewestSentId?: string | null;
     rawNewestSentAt?: string | null;
+    /** Corpus origin — staleness is only meaningful against the same source. */
+    source?: "gmail" | "demo";
     filtered: number;
     skipped: number;
   };

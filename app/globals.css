@@ -1610,3 +1610,13 @@ kbd {
 @media (max-width: 719px) {
   .hint-bar { display: none; }
 }
+
+/* Stale chip must clip, never paint over the tabs (brand-lockup shrinks). */
+.brand-lockup { overflow: hidden; }
+.chip-action {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}

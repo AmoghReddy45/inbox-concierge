@@ -46,7 +46,7 @@ export function useVoiceProfile(source: ThreadSource | null, llmConfigured: bool
     void fetch(`/api/gmail/sent?${params}`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((probe: SentProbeResponse | null) => {
-        if (!cancelled && probe) setStale(isProfileStale(stored, probe));
+        if (!cancelled && probe) setStale(isProfileStale(stored, probe, source));
       })
       .catch(() => undefined);
     return () => {

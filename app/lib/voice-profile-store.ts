@@ -50,12 +50,22 @@ export function withProfileEdit(
 /**
  * Stale when there is sent mail newer than the corpus, or the profile is
  * over 30 days old. Never triggers a rebuild by itself — only a chip.
+ * Cross-source comparisons (gmail profile probed against the demo corpus,
+ * or vice versa) are meaningless and never flag stale.
  */
-export function isProfileStale(stored: StoredVoiceProfile, probe: SentProbeResponse | null): boolean {
+export function isProfileStale(
+  stored: StoredVoiceProfile,
+  probe: SentProbeResponse | null,
+  currentSource?: "gmail" | "demo",
+): boolean {
   const builtAt = new Date(stored.profile.builtAt).getTime();
   if (Number.isFinite(builtAt) && Date.now() - builtAt > STALE_AFTER_DAYS * 24 * 3_600_000) {
     return true;
   }
+  // Probe comparison is only meaningful within one source. Legacy profiles
+  // without a stamp get age-based staleness only.
+  const profileSource = stored.profile.corpus.source;
+  if (!profileSource || (currentSource && profileSource !== currentSource)) return false;
   if (!probe?.newestSentId) return false;
   // Probe-to-probe: the corpus head is post-filter, but the probe is raw —
   // comparing them directly would pin the chip on after any calendar accept.

@@ -102,6 +102,7 @@ export function computeStats(
   counts: LearnCounts,
   candidates: { greetings: string[]; signoffs: string[] },
   rawProbe?: { newestSentId: string | null; newestSentAt: string | null } | null,
+  source: "gmail" | "demo" = "gmail",
 ): CodeStats {
   const signature = detectSignature(prepared);
   const reply = replyStats(prepared);
@@ -120,6 +121,7 @@ export function computeStats(
       // else a trailing calendar-accept pins the stale chip on forever.
       rawNewestSentId: rawProbe?.newestSentId ?? null,
       rawNewestSentAt: rawProbe?.newestSentAt ?? null,
+      source,
       filtered: counts.filtered,
       skipped: counts.skipped,
     },
@@ -375,7 +377,7 @@ export async function runVoiceLearn(options: LearnOptions): Promise<StoredVoiceP
 
   // Heuristic mode: measured stats only, zero LLM calls, honest meta.
   if (!llmConfigured) {
-    const stats = computeStats(prepared, counts, DEFAULT_PATTERN_CANDIDATES, rawProbe);
+    const stats = computeStats(prepared, counts, DEFAULT_PATTERN_CANDIDATES, rawProbe, demo ? "demo" : "gmail");
     onProgress({ stage: "done" });
     return {
       profile: buildHeuristicProfile(prepared, stats),
@@ -418,6 +420,7 @@ export async function runVoiceLearn(options: LearnOptions): Promise<StoredVoiceP
       signoffs: partials.flatMap((partial) => partial.signoffCandidates),
     },
     rawProbe,
+    demo ? "demo" : "gmail",
   );
   onProgress({ stage: "distilling", step: stepCount, stepCount, costMicros: spentSoFar() });
   try {

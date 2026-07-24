@@ -21,6 +21,7 @@ function storedOf(builtAt: string, newestSentId = "s1", newestSentAt = builtAt):
         newestSentAt,
         oldestSentAt: builtAt,
         newestSentId,
+        source: "gmail" as const,
         filtered: 0,
         skipped: 0,
       },
@@ -133,4 +134,30 @@ test("isProfileStale compares probe-to-probe when the raw head was recorded", ()
     true,
     "genuinely newer sent mail",
   );
+});
+
+test("isProfileStale never flags across sources or for unstamped legacy profiles", () => {
+  const now = Date.now();
+  const gmailProfile = storedOf(new Date(now - 24 * 3_600_000).toISOString());
+  const newerProbe = { newestSentId: "demo-sent-0", newestSentAt: new Date(now).toISOString() };
+  assert.equal(
+    isProfileStale(gmailProfile, newerProbe, "demo"),
+    false,
+    "gmail-built profile probed in demo mode is not comparable",
+  );
+  assert.equal(
+    isProfileStale(gmailProfile, newerProbe, "gmail"),
+    true,
+    "same source still detects real staleness",
+  );
+  const legacy = storedOf(new Date(now - 24 * 3_600_000).toISOString());
+  delete (legacy.profile.corpus as { source?: string }).source;
+  assert.equal(
+    isProfileStale(legacy, newerProbe, "demo"),
+    false,
+    "unstamped legacy profile gets age-based staleness only",
+  );
+  const ancientLegacy = storedOf(new Date(now - 40 * 24 * 3_600_000).toISOString());
+  delete (ancientLegacy.profile.corpus as { source?: string }).source;
+  assert.equal(isProfileStale(ancientLegacy, null, "demo"), true, "age check is source-independent");
 });

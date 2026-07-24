@@ -91,8 +91,13 @@ export function TopBar({
         {mode === "demo" && <span className="mode-chip">Demo inbox</span>}
         {!classifierConfigured && <span className="mode-chip chip-warning">Heuristic classifier</span>}
         {voiceStale && (
-          <button type="button" className="mode-chip chip-warning chip-action" onClick={onVoice}>
-            New sent mail · voice profile is stale
+          <button
+            type="button"
+            className="mode-chip chip-warning chip-action"
+            title="New sent mail since your voice profile was built — click to rebuild"
+            onClick={onVoice}
+          >
+            Voice profile stale
           </button>
         )}
       </div>

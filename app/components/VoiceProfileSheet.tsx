@@ -59,7 +59,9 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose, 
         </header>
 
         <p className="voice-meta mono">
-          {profile.corpus.sampleCount} sent messages · built {builtDate} ·{" "}
+          {profile.corpus.sampleCount} sent messages
+          {profile.corpus.source ? ` (${profile.corpus.source === "demo" ? "demo corpus" : "gmail"})` : ""} · built{" "}
+          {builtDate} ·{" "}
           {meta.heuristicOnly
             ? "measured stats only (no model)"
             : `${meta.model} · ${meta.costMicros !== null ? formatCost(meta.costMicros) : "cost n/a"}`}
