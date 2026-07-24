@@ -44,11 +44,14 @@ export function ProgressStrip({ snapshot, expectedTotal, onPause, onResume }: Pr
         <span style={{ width: `${percent}%` }} />
       </div>
       <span className="progress-copy mono">
+        {!paused && !snapshot.manuallyPaused && (
+          <span className="progress-live-dot" aria-hidden="true" />
+        )}
         {paused
           ? `Rate limited · resuming in ${pauseSeconds}s`
           : snapshot.manuallyPaused
             ? `Paused · ${terminal} / ${total}`
-            : `${terminal} / ${total}`}
+            : `Classifying · ${terminal} / ${total}`}
         <button
           type="button"
           className="progress-control"

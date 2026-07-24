@@ -59,6 +59,25 @@ export function ThreadList({
   }
 
   if (!threads.length) {
+    const total = snapshot?.total ?? 0;
+    const terminal = snapshot ? snapshot.counts.classified + snapshot.counts.failed : 0;
+    const classifying = total > 0 && terminal < total;
+    // While a run is live, an empty tab means "not sorted yet", not "empty" —
+    // saying otherwise would be dishonest for the first ~10 seconds.
+    if (classifying) {
+      return (
+        <div className="thread-list" aria-busy="true">
+          <div className="empty-state">
+            <span className="sorting-spinner" aria-hidden="true" />
+            <strong>Sorting the inbox…</strong>
+            <span>
+              {terminal} of {total} threads classified — each lands here the moment its
+              model decision arrives.
+            </span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="thread-list">
         <div className="empty-state">
