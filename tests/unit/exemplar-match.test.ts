@@ -46,6 +46,7 @@ function profileOf(overrides: Partial<VoiceProfile> = {}): VoiceProfile {
         { situation: "scheduling", share: 0.06, typicalLatency: "~8h", count: 2 },
       ],
       neverObserved: ["cold-outreach", "intro"],
+      studiedReplies: 30,
     },
     driftNotes: [],
     ...overrides,
@@ -75,7 +76,7 @@ test("computeReplyLikelihood states only measured numbers", () => {
   const profile = profileOf();
   const typical = computeReplyLikelihood("escalation", profile);
   assert.equal(typical.level, "typical");
-  assert.ok(typical.note.includes("10 of your last 32 replies"));
+  assert.ok(typical.note.includes("10 of your 30 studied replies"), typical.note);
   assert.ok(typical.note.includes("~45m"));
 
   const sometimes = computeReplyLikelihood("scheduling", profile);
@@ -84,7 +85,7 @@ test("computeReplyLikelihood states only measured numbers", () => {
 
   const never = computeReplyLikelihood("cold-outreach", profile);
   assert.equal(never.level, "no-evidence");
-  assert.ok(never.note.includes("None of your last 32"));
+  assert.ok(never.note.includes("None of your 30 studied replies"), never.note);
 
   assert.equal(computeReplyLikelihood("bulk", profile).level, "unknown");
   assert.equal(computeReplyLikelihood("fyi", profile).level, "unknown");

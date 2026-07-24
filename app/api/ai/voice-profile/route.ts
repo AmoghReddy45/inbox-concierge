@@ -17,6 +17,7 @@ import {
   type VoiceProfile,
 } from "../../../../lib/voice-types";
 import { computeCostMicros } from "../../../../lib/llm-cost";
+import { isValidCodeStats, sanitizeFenceMarkers } from "../../../../lib/voice-validate";
 // app/lib (pure measurement modules), not the repo-root lib.
 import { SITUATIONS, stripSignature } from "../../../lib/voice-corpus";
 import { enforceRecencyFloor } from "../../../lib/voice-learn";
@@ -94,10 +95,10 @@ function buildObserveMessages(payload: ObserveRequest) {
     lines.push(
       `[sample id=${sample.id} tier=${sample.tier} kind=${sample.kind} internal=${sample.internal} sent=${sample.sentAt.slice(0, 10)}]`,
     );
-    lines.push(`subject: ${sample.subject}`);
-    if (sample.parentSender) lines.push(`parent_from: ${sample.parentSender}`);
-    if (sample.parentExcerpt) lines.push(`parent_excerpt: ${sample.parentExcerpt}`);
-    lines.push("body:", sample.body, "[end sample]", "");
+    lines.push(`subject: ${sanitizeFenceMarkers(sample.subject)}`);
+    if (sample.parentSender) lines.push(`parent_from: ${sanitizeFenceMarkers(sample.parentSender)}`);
+    if (sample.parentExcerpt) lines.push(`parent_excerpt: ${sanitizeFenceMarkers(sample.parentExcerpt)}`);
+    lines.push("body:", sanitizeFenceMarkers(sample.body), "[end sample]", "");
   }
   lines.push("</untrusted_sent_mail>");
   return [
@@ -151,7 +152,7 @@ function buildMergeMessages(payload: MergeRequest) {
   const sampleIndex = payload.samples
     .map(
       (sample) =>
-        `[id=${sample.id} rank=${sample.rank} internal=${sample.internal} sent=${sample.sentAt.slice(0, 10)}]\n${sample.body.slice(0, 600)}`,
+        `[id=${sample.id} rank=${sample.rank} internal=${sample.internal} sent=${sample.sentAt.slice(0, 10)}]\n${sanitizeFenceMarkers(sample.body.slice(0, 600))}`,
     )
     .join("\n\n");
   const content = [
@@ -344,14 +345,20 @@ export async function POST(request: Request) {
   if (secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
     return errorResponse("bad_request", "Cross-site requests are not accepted", 403, false);
   }
-  const contentLength = Number(request.headers.get("Content-Length") ?? 0);
-  if (contentLength > MAX_BODY_BYTES) {
+  // Size cap on the actual body — Content-Length is client-supplied and
+  // absent on chunked requests.
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch {
+    return errorResponse("bad_request", "Request body unreadable", 400, false);
+  }
+  if (rawBody.length > MAX_BODY_BYTES) {
     return errorResponse("bad_request", "Request body too large", 413, false);
   }
-
   let payload: ObserveRequest | MergeRequest;
   try {
-    payload = (await request.json()) as ObserveRequest | MergeRequest;
+    payload = JSON.parse(rawBody) as ObserveRequest | MergeRequest;
   } catch {
     return errorResponse("bad_request", "Request body must be JSON", 400, false);
   }
@@ -396,10 +403,15 @@ export async function POST(request: Request) {
     const partials = (Array.isArray(payload.partials) ? payload.partials : []).slice(0, 6);
     const samples = (Array.isArray(payload.samples) ? payload.samples : [])
       .filter(validMergeSample)
+      .slice(0, 60)
       .map((sample) => ({ ...sample, body: sample.body.slice(0, 1_500) }));
     const stats = payload.stats;
-    if (!partials.length || !samples.length || !isRecord(stats)) {
+    if (!partials.length || !samples.length) {
       return errorResponse("bad_request", "merge needs partials, samples, and a stats block", 400, false);
+    }
+    // Malformed stats must fail BEFORE the paid provider call.
+    if (!isValidCodeStats(stats)) {
+      return errorResponse("bad_request", "stats block failed structural validation", 400, false);
     }
 
     const outcome = await callProvider(apiKey, buildMergeMessages({ ...payload, partials, samples }), 3_072);

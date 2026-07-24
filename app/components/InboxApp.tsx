@@ -334,8 +334,9 @@ export function InboxApp() {
     else if (helpOpen) setHelpOpen(false);
     else if (bucketModalOpen) setBucketModalOpen(false);
     else if (voiceModal) {
-      // A running learn job keeps its modal — progress must stay visible.
-      if (!voiceLearning) closeVoiceModal();
+      // Only the running learn job pins its modal — progress must stay
+      // visible; the profile sheet always closes.
+      if (!(voiceLearning && voiceModal === "onboarding")) closeVoiceModal();
     } else if (panel.open) setPanel({ open: false, correcting: false });
     else if (openThreadId) setOpenThreadId(null);
     else if (query) setQuery("");

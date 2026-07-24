@@ -112,6 +112,9 @@ export function useVoiceProfile(source: ThreadSource | null, llmConfigured: bool
   const acknowledge = useCallback(() => setProgress(null), []);
 
   const clear = useCallback(() => {
+    // A learn run in flight would resurrect the profile it saves — stop it.
+    abortRef.current?.abort();
+    setProgress(null);
     clearVoiceProfile(window.localStorage);
     setStored(null);
     setStale(false);

@@ -120,7 +120,7 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose, 
 
           {!meta.heuristicOnly && (
             <section>
-              <h3>Tone</h3>
+              <h3>Tone (model-assessed)</h3>
               <div className="voice-axes">
                 {(
                   [
@@ -192,13 +192,16 @@ export function VoiceProfileSheet({ stored, stale, onRebuild, onClear, onClose, 
           )}
 
           <section>
-            <h3>What you reply to</h3>
+            <h3>
+              What you reply to ({profile.replyBehavior.studiedReplies ?? profile.corpus.replyCount}{" "}
+              studied replies)
+            </h3>
             <ul className="voice-list">
               {profile.replyBehavior.respondsTo.map((entry) => (
                 <li key={entry.situation}>
                   <strong>{entry.situation}</strong> — {entry.count} repl
-                  {entry.count === 1 ? "y" : "ies"} ({pct(entry.share)} of your replies), typically{" "}
-                  {entry.typicalLatency}
+                  {entry.count === 1 ? "y" : "ies"} ({pct(entry.share)} of studied replies),
+                  typically {entry.typicalLatency}
                 </li>
               ))}
             </ul>

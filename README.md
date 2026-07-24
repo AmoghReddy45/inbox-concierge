@@ -185,6 +185,13 @@ never an override of the visible decision.
 
 ## Deliberate omissions (and the production path)
 
+- **AI endpoints are same-origin-guarded, not session-gated.** `/api/ai/*` reject
+  cross-site requests via `Sec-Fetch-Site` and cap body sizes on the actual bytes read,
+  but do not require the Google session cookie — demo mode (no Google account) must be
+  able to classify and draft, and the eval harness drives the production endpoint
+  headlessly. Production path: a signed demo token plus session gating for connected
+  users, with per-session spend budgets.
+
 - **No server-side job queue.** Two hundred classifications are orchestrated client-side with
   bounded concurrency — the simplest thing that is genuinely real. In production this becomes
   a durable queue with idempotent jobs and dead-lettering.

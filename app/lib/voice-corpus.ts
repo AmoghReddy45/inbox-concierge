@@ -140,7 +140,7 @@ export type Situation = (typeof SITUATIONS)[number];
 /** Deterministic situation classification of what a reply answered. */
 export function situationOfParent(excerpt: string): Situation {
   const lower = excerpt.toLowerCase();
-  if (/urgent|outage|blocking|failing|escalat|refund|down\b|broken|asap|incident/.test(lower)) return "escalation";
+  if (/urgent|outage|blocking|failing|escalat|refund|\bdown\b|broken|asap|incident/.test(lower)) return "escalation";
   if (/intro|connect(ing)? you|meet .{0,20}(each other|both)/.test(lower)) return "intro";
   // Cold-outreach cues before scheduling: "worth a quick call" is a pitch, not a meeting.
   if (/worth a .{0,12}call|quick question about (your|the) (stack|tools)|we (help|plug|automate)|book a demo|free trial/.test(lower)) return "cold-outreach";

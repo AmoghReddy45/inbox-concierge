@@ -30,6 +30,8 @@ export type GenerateOptions = {
  */
 export function useDraft(
   thread: ThreadSummary,
+  /** Id of the newest message actually rendered/drafted against. */
+  latestMessageId: string,
   profile: VoiceProfile,
   revision: number,
   situation: ThreadSituation,
@@ -39,7 +41,7 @@ export function useDraft(
   const [cache] = useState<DraftCache | null>(() =>
     typeof window === "undefined" ? null : new DraftCache(window.localStorage),
   );
-  const cacheKey = cache?.key(profile.builtAt, revision, thread.id, thread.latestMessageId) ?? null;
+  const cacheKey = cache?.key(profile.builtAt, revision, thread.id, latestMessageId) ?? null;
   const [state, setState] = useState<DraftState>(() => {
     const hit = cache && cacheKey ? cache.get(cacheKey) : null;
     return hit ? { status: "ready", response: hit.response, cached: true } : { status: "idle" };

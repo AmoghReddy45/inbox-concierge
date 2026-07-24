@@ -17,6 +17,7 @@ import {
   type VerifyResponse,
 } from "../../../../lib/types";
 import { computeCostMicros } from "../../../../lib/llm-cost";
+import { sanitizeFenceMarkers } from "../../../../lib/voice-validate";
 
 const MAX_BODY_BYTES = 32_000;
 const PROVIDER_URL = "https://api.moonshot.ai/v1/chat/completions";
@@ -411,17 +412,21 @@ export async function POST(request: Request) {
     return errorResponse("bad_request", "Taxonomy is invalid", 400, false);
   }
 
+  // Attacker text must not be able to close/forge the untrusted fence.
+  // Sanitized here so the prompt and the evidence-grounding haystack agree.
   const normalizedThread: TriageRequest["thread"] = {
     id: thread.id,
-    sender: typeof thread.sender === "string" ? thread.sender : "Unknown sender",
+    sender: sanitizeFenceMarkers(
+      typeof thread.sender === "string" ? thread.sender : "Unknown sender",
+    ),
     email: typeof thread.email === "string" ? thread.email : "",
-    subject: thread.subject,
+    subject: sanitizeFenceMarkers(thread.subject),
     date: typeof thread.date === "string" ? thread.date : "",
     gmailLabels: Array.isArray(thread.gmailLabels)
       ? thread.gmailLabels.filter((label): label is string => typeof label === "string")
       : [],
     listUnsubscribe: thread.listUnsubscribe === true,
-    excerpt: thread.excerpt,
+    excerpt: sanitizeFenceMarkers(thread.excerpt),
     messageCount: typeof thread.messageCount === "number" ? thread.messageCount : 1,
     userReplied: typeof thread.userReplied === "boolean" ? thread.userReplied : undefined,
     senderDomainRelation:

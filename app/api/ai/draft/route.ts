@@ -6,6 +6,7 @@ import {
   type VoiceProfile,
 } from "../../../../lib/voice-types";
 import { computeCostMicros } from "../../../../lib/llm-cost";
+import { isValidVoiceProfile, sanitizeFenceMarkers } from "../../../../lib/voice-validate";
 
 const MAX_BODY_BYTES = 131_072;
 const PROVIDER_URL = "https://api.moonshot.ai/v1/chat/completions";
@@ -103,9 +104,12 @@ function buildMessages(payload: DraftRequest) {
       ? `PREVIOUS DRAFT${payload.adjust === "shorter" ? " (make it materially shorter)" : " (produce a different take)"}:\n${payload.previousDraft}`
       : "",
     "",
-    `THREAD (from ${thread.sender} <${thread.email}>, subject "${thread.subject}", ${thread.date}):`,
+    // Sender/subject are third-party-authored too — they ride inside the fence.
+    "THREAD:",
     "<untrusted_email_thread>",
-    thread.excerpt,
+    sanitizeFenceMarkers(
+      `From: ${thread.sender} <${thread.email}>\nSubject: ${thread.subject}\nDate: ${thread.date}\n\n${thread.excerpt}`,
+    ),
     "</untrusted_email_thread>",
     "",
     "Draft the reply body now.",
@@ -143,9 +147,27 @@ function groundRationale(
       const pattern = normalizeForMatch(entry.pattern);
       if (!pattern) return false;
       if (haystack.includes(pattern)) return true;
-      // Allow 6+ char fragments so close paraphrases of long elements still ground.
-      const words = pattern.split(" ").filter((word) => word.length > 2);
-      const matched = words.filter((word) => haystack.includes(word)).length;
+      // Paraphrase fallback: only distinctive fragments (5+ chars, 3+ of
+      // them) may ground — short stopwords let fabricated patterns through.
+      // Light stemming so "claims"/"claiming" and "incidents"/"incident"
+      // still match their profile source.
+      const stems = (word: string) => {
+        const bare = word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+        const variants = [bare];
+        for (const suffix of ["ing", "ed", "es", "ly", "s"]) {
+          if (bare.endsWith(suffix) && bare.length - suffix.length >= 4) {
+            variants.push(bare.slice(0, bare.length - suffix.length));
+          }
+        }
+        return variants;
+      };
+      const words = pattern
+        .split(" ")
+        .map((word) => stems(word))
+        .filter((variants) => (variants[0]?.length ?? 0) >= 5);
+      const matched = words.filter((variants) =>
+        variants.some((variant) => haystack.includes(variant)),
+      ).length;
       return words.length >= 3 && matched / words.length >= 0.7;
     })
     .map((entry) => ({
@@ -171,11 +193,6 @@ export async function POST(request: Request) {
   if (secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
     return errorResponse("bad_request", "Cross-site requests are not accepted", 403, false);
   }
-  const contentLength = Number(request.headers.get("Content-Length") ?? 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return errorResponse("bad_request", "Request body too large", 413, false);
-  }
-
   const apiKey = getApiKey();
   if (!apiKey) {
     return errorResponse(
@@ -186,9 +203,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Size cap on the actual body — Content-Length is client-supplied and
+  // absent on chunked requests.
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch {
+    return errorResponse("bad_request", "Request body unreadable", 400, false);
+  }
+  if (rawBody.length > MAX_BODY_BYTES) {
+    return errorResponse("bad_request", "Request body too large", 413, false);
+  }
   let payload: DraftRequest;
   try {
-    payload = (await request.json()) as DraftRequest;
+    payload = JSON.parse(rawBody) as DraftRequest;
   } catch {
     return errorResponse("bad_request", "Request body must be JSON", 400, false);
   }
@@ -197,13 +225,25 @@ export async function POST(request: Request) {
     !isRecord(payload.thread) ||
     typeof payload.thread.excerpt !== "string" ||
     !payload.thread.excerpt.trim() ||
-    !isRecord(payload.profile) ||
+    typeof payload.thread.subject !== "string" ||
+    typeof payload.thread.sender !== "string" ||
+    typeof payload.thread.email !== "string" ||
     !Array.isArray(payload.exemplars)
   ) {
     return errorResponse("bad_request", "thread, profile, and exemplars are required", 400, false);
   }
+  if (!isValidVoiceProfile(payload.profile)) {
+    return errorResponse(
+      "bad_request",
+      "profile failed structural validation — rebuild the voice profile",
+      400,
+      false,
+    );
+  }
   payload.thread.excerpt = payload.thread.excerpt.slice(0, 2_400);
-  payload.exemplars = payload.exemplars.slice(0, 3);
+  payload.exemplars = payload.exemplars
+    .filter((exemplar) => isRecord(exemplar) && typeof exemplar.body === "string")
+    .slice(0, 3);
 
   const effortEnv = process.env.KIMI_REASONING_EFFORT ?? "low";
   const reasoningEffort = effortEnv === "off" ? null : effortEnv;

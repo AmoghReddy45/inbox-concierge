@@ -95,7 +95,13 @@ export function VoiceOnboarding({
               </div>
               <div>
                 <dt>Measured cost</dt>
-                <dd>{stored.meta.costMicros !== null ? formatCost(stored.meta.costMicros) : "$0 (no model calls)"}</dd>
+                <dd>
+                  {stored.meta.heuristicOnly
+                    ? "$0 (no model calls)"
+                    : stored.meta.costMicros !== null
+                      ? formatCost(stored.meta.costMicros)
+                      : "n/a"}
+                </dd>
               </div>
               <div>
                 <dt>Model time</dt>

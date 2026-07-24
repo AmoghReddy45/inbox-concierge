@@ -36,7 +36,7 @@ function storedOf(builtAt: string, newestSentId = "s1", newestSentAt = builtAt):
         { situation: "request", parentGist: "", body: "Two.", sentAt: builtAt, internal: true },
         { situation: "fyi", parentGist: "", body: "Three.", sentAt: builtAt, internal: false },
       ],
-      replyBehavior: { respondsTo: [], neverObserved: [] },
+      replyBehavior: { respondsTo: [], neverObserved: [], studiedReplies: 32 },
       driftNotes: [],
     },
     meta: {
@@ -107,4 +107,30 @@ test("isProfileStale: fresh, new-sent-mail, and age cases", () => {
   );
   const ancient = storedOf(new Date(now - 40 * 24 * 3_600_000).toISOString());
   assert.equal(isProfileStale(ancient, null), true, "over 30 days old");
+});
+
+test("isProfileStale compares probe-to-probe when the raw head was recorded", () => {
+  const now = Date.now();
+  const stored = storedOf(new Date(now - 24 * 3_600_000).toISOString());
+  // Newest sent item at build time was a filtered calendar accept: raw head
+  // differs from the corpus head. The probe returning that same raw id must
+  // NOT flag stale.
+  stored.profile.corpus.rawNewestSentId = "cal-accept-1";
+  stored.profile.corpus.rawNewestSentAt = new Date(now - 3_600_000).toISOString();
+  assert.equal(
+    isProfileStale(stored, {
+      newestSentId: "cal-accept-1",
+      newestSentAt: stored.profile.corpus.rawNewestSentAt,
+    }),
+    false,
+    "raw head unchanged — not stale despite corpus-id mismatch",
+  );
+  assert.equal(
+    isProfileStale(stored, {
+      newestSentId: "brand-new",
+      newestSentAt: new Date(now).toISOString(),
+    }),
+    true,
+    "genuinely newer sent mail",
+  );
 });

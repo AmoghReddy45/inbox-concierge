@@ -57,8 +57,11 @@ export function isProfileStale(stored: StoredVoiceProfile, probe: SentProbeRespo
     return true;
   }
   if (!probe?.newestSentId) return false;
-  if (probe.newestSentId === stored.profile.corpus.newestSentId) return false;
+  // Probe-to-probe: the corpus head is post-filter, but the probe is raw —
+  // comparing them directly would pin the chip on after any calendar accept.
+  const baselineId = stored.profile.corpus.rawNewestSentId ?? stored.profile.corpus.newestSentId;
+  const baselineAt = stored.profile.corpus.rawNewestSentAt ?? stored.profile.corpus.newestSentAt;
+  if (probe.newestSentId === baselineId) return false;
   const probeAt = probe.newestSentAt ? new Date(probe.newestSentAt).getTime() : 0;
-  const corpusAt = new Date(stored.profile.corpus.newestSentAt).getTime();
-  return probeAt > corpusAt;
+  return probeAt > new Date(baselineAt).getTime();
 }

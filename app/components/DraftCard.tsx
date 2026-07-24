@@ -33,9 +33,18 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
     () => matchExemplars(profile, { situation, internal }, 3),
     [internal, profile, situation],
   );
-  const { state, generate } = useDraft(thread, profile, revision, situation, exemplars, bucketId);
-
   const latest = messages[messages.length - 1];
+  // Cache identity follows the message actually drafted against (the freshly
+  // fetched detail), not the session-frozen list snapshot.
+  const { state, generate } = useDraft(
+    thread,
+    latest?.id ?? thread.latestMessageId,
+    profile,
+    revision,
+    situation,
+    exemplars,
+    bucketId,
+  );
   const mode: "reply" | "followup" =
     sessionEmail && latest && latest.email.toLowerCase() === sessionEmail.toLowerCase()
       ? "followup"
@@ -50,19 +59,29 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const response = state.status === "ready" ? state.response : null;
-  const draftWithSignature = response
-    ? `${response.draft.body}${profile.signature ? `\n\n${profile.signature}` : ""}`
+  // A failed or in-flight regenerate must not erase the draft on screen.
+  const previous =
+    state.status === "generating" || state.status === "error" ? state.previous : null;
+  const displayed = response ?? previous;
+  const draftWithSignature = displayed
+    ? `${displayed.draft.body}${profile.signature ? `\n\n${profile.signature}` : ""}`
     : "";
   const value =
     edited && edited.of === draftWithSignature ? edited.text : draftWithSignature;
 
-  // `r` drafts from anywhere in the open thread (matches the global-shortcut input guard).
+  // `r` drafts from anywhere in the open thread (matches the global-shortcut
+  // input guard). Never registered for heuristic profiles — a keypress must
+  // not trigger spend the disabled UI can't even display.
+  const heuristicOnly = meta.heuristicOnly;
   useEffect(() => {
+    if (heuristicOnly) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const typing =
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
       if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      // Bail while any modal/overlay (palette, sheets, help) is open.
+      if (document.querySelector(".overlay")) return;
       if (event.key === "r" && state.status === "idle") {
         event.preventDefault();
         generate({ mode, excerpt });
@@ -70,7 +89,7 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [excerpt, generate, mode, state.status]);
+  }, [excerpt, generate, heuristicOnly, mode, state.status]);
 
   if (meta.heuristicOnly) {
     return (
@@ -88,7 +107,7 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
     });
   };
 
-  if (state.status === "idle" || state.status === "generating" || state.status === "error") {
+  if (!displayed) {
     return (
       <div className="draft-card">
         {state.status === "error" && (
@@ -118,11 +137,16 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
     );
   }
 
-  if (!response) return null;
-  const { draft, meta: draftMeta } = response;
+  const { draft, meta: draftMeta } = displayed;
+  const generating = state.status === "generating";
 
   return (
     <div className="draft-card draft-ready">
+      {state.status === "error" && (
+        <p className="voice-error" role="alert">
+          {state.message} — the previous draft is kept below.
+        </p>
+      )}
       <textarea
         ref={textareaRef}
         className="draft-textarea"
@@ -139,13 +163,15 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
         <button
           type="button"
           className="button-secondary draft-button"
+          disabled={generating}
           onClick={() => generate({ mode, excerpt, regenerate: true })}
         >
-          <RotateCw size={13} aria-hidden="true" /> Try again
+          <RotateCw size={13} aria-hidden="true" /> {generating ? "Drafting…" : "Try again"}
         </button>
         <button
           type="button"
           className="button-secondary draft-button"
+          disabled={generating}
           onClick={() => generate({ mode, excerpt, regenerate: true, adjust: "shorter" })}
         >
           <Scissors size={13} aria-hidden="true" /> Shorter
@@ -169,7 +195,7 @@ export function DraftCard({ thread, messages, sessionEmail, bucketId, stored, si
         </ul>
       )}
       <p className="draft-meta mono">
-        {state.cached ? "cached draft · " : ""}
+        {state.status === "ready" && state.cached ? "cached draft · " : ""}
         {draftMeta.model} · {(draftMeta.latencyMs / 1000).toFixed(1)}s ·{" "}
         {draftMeta.costMicros !== null ? formatCost(draftMeta.costMicros) : "cost n/a"} · profile{" "}
         {new Date(draftMeta.profileBuiltAt).toLocaleDateString(undefined, {

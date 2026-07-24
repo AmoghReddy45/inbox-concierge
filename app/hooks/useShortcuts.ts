@@ -30,6 +30,12 @@ export function useShortcuts(handlers: ShortcutHandlers) {
         return;
       }
       if (event.key === "Escape") {
+        // While typing, Escape releases focus instead of tearing down the
+        // surface underneath (thread view, draft textarea edits).
+        if (typing) {
+          target.blur();
+          return;
+        }
         handlers.onEscape();
         return;
       }

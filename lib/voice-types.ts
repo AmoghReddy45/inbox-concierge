@@ -145,7 +145,7 @@ export type VoiceContextMode = {
 };
 
 export type VoiceExemplar = {
-  /** A VoiceContextMode id. */
+  /** A measured situation slug (escalation|request|scheduling|intro|cold-outreach|fyi). */
   situation: string;
   /** One line: what they were replying to. */
   parentGist: string;
@@ -165,7 +165,11 @@ export type VoiceProfile = {
     forwardCount: number;
     newestSentAt: string;
     oldestSentAt: string;
+    /** Newest USABLE sample (post junk-filter). */
     newestSentId: string;
+    /** Raw probe head at build time — staleness compares probe-to-probe. */
+    rawNewestSentId?: string | null;
+    rawNewestSentAt?: string | null;
     filtered: number;
     skipped: number;
   };
@@ -183,6 +187,12 @@ export type VoiceProfile = {
     respondsTo: Array<{ situation: string; share: number; typicalLatency: string; count: number }>;
     /** Situations with zero observed replies — absence of evidence, not prediction. */
     neverObserved: string[];
+    /**
+     * Denominator for shares/notes: replies whose parent message was
+     * recoverable. Can be lower than corpus.replyCount (deleted originals,
+     * split threads) — the two must never be conflated in copy.
+     */
+    studiedReplies: number;
   };
   driftNotes: string[];
 };

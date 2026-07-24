@@ -109,7 +109,9 @@ export function demoSentPage(pageToken: string | null, now: number): SentPageRes
     nextPageToken: page === 0 && all.length > DEMO_SENT_PAGE_SIZE ? "demo-sent-2" : null,
     scannedThreads: samples.length,
     skipped: 0,
-    filtered: page === 0 ? 3 : 0, // authored corpus stands in for calendar-accept drops
+    // The authored corpus contains no junk, so the honest count is zero —
+    // a stand-in number would be fabricated telemetry.
+    filtered: 0,
     mode: "demo",
   };
 }

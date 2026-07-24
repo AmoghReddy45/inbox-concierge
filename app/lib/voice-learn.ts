@@ -101,6 +101,7 @@ export function computeStats(
   prepared: PreparedSample[],
   counts: LearnCounts,
   candidates: { greetings: string[]; signoffs: string[] },
+  rawProbe?: { newestSentId: string | null; newestSentAt: string | null } | null,
 ): CodeStats {
   const signature = detectSignature(prepared);
   const reply = replyStats(prepared);
@@ -115,6 +116,10 @@ export function computeStats(
       newestSentAt: newest?.sentAt ?? "",
       oldestSentAt: oldest?.sentAt ?? "",
       newestSentId: newest?.id ?? "",
+      // Raw (pre-filter) mailbox head — staleness compares probe-to-probe,
+      // else a trailing calendar-accept pins the stale chip on forever.
+      rawNewestSentId: rawProbe?.newestSentId ?? null,
+      rawNewestSentAt: rawProbe?.newestSentAt ?? null,
       filtered: counts.filtered,
       skipped: counts.skipped,
     },
@@ -132,7 +137,11 @@ export function computeStats(
       signature,
     ).slice(0, 6),
     length: lengthStats(prepared, signature),
-    replyBehavior: { respondsTo: reply.respondsTo, neverObserved: reply.neverObserved },
+    replyBehavior: {
+      respondsTo: reply.respondsTo,
+      neverObserved: reply.neverObserved,
+      studiedReplies: reply.replyCount,
+    },
   };
 }
 
@@ -344,10 +353,29 @@ export async function runVoiceLearn(options: LearnOptions): Promise<StoredVoiceP
       null,
     );
   }
+  // Exact-duplicate merges are drops too — surfaced, never silent.
+  // (Checkpoint counts already include them, so only count on a fresh read.)
+  if (!options.resumeFrom) {
+    counts.filtered += Math.max(0, samples.length - prepared.length);
+  }
+
+  // Raw mailbox head for probe-to-probe staleness comparison (best-effort).
+  let rawProbe: { newestSentId: string | null; newestSentAt: string | null } | null = null;
+  try {
+    const probeResponse = await fetch(`/api/gmail/sent?${demo ? "demo=1&" : ""}probe=1`, {
+      cache: "no-store",
+      signal,
+    });
+    if (probeResponse.ok) {
+      rawProbe = (await probeResponse.json()) as typeof rawProbe;
+    }
+  } catch {
+    // Staleness detection degrades to the filtered head — not fatal.
+  }
 
   // Heuristic mode: measured stats only, zero LLM calls, honest meta.
   if (!llmConfigured) {
-    const stats = computeStats(prepared, counts, DEFAULT_PATTERN_CANDIDATES);
+    const stats = computeStats(prepared, counts, DEFAULT_PATTERN_CANDIDATES, rawProbe);
     onProgress({ stage: "done" });
     return {
       profile: buildHeuristicProfile(prepared, stats),
@@ -382,10 +410,15 @@ export async function runVoiceLearn(options: LearnOptions): Promise<StoredVoiceP
   }
 
   // Phase 3 — measure with model-proposed candidates, then merge.
-  const stats = computeStats(prepared, counts, {
-    greetings: partials.flatMap((partial) => partial.greetingCandidates),
-    signoffs: partials.flatMap((partial) => partial.signoffCandidates),
-  });
+  const stats = computeStats(
+    prepared,
+    counts,
+    {
+      greetings: partials.flatMap((partial) => partial.greetingCandidates),
+      signoffs: partials.flatMap((partial) => partial.signoffCandidates),
+    },
+    rawProbe,
+  );
   onProgress({ stage: "distilling", step: stepCount, stepCount, costMicros: spentSoFar() });
   try {
     const result = await postPhase<MergeResponse>(

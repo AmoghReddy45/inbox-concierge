@@ -26,7 +26,9 @@ export function computeReplyLikelihood(
   situation: ThreadSituation,
   profile: VoiceProfile,
 ): ReplyLikelihood {
-  const replies = profile.corpus.replyCount;
+  // Denominator = replies whose parent was recoverable — the same base the
+  // shares were measured over. corpus.replyCount can be higher.
+  const replies = profile.replyBehavior.studiedReplies ?? profile.corpus.replyCount;
   if (situation === "bulk") {
     return {
       level: "unknown",
@@ -36,23 +38,23 @@ export function computeReplyLikelihood(
   const entry = profile.replyBehavior.respondsTo.find(
     (candidate) => candidate.situation === situation,
   );
-  const latency = entry && entry.typicalLatency !== "n/a" ? `, typically within ${entry.typicalLatency}` : "";
-  if (entry && entry.count >= 3) {
+  const latency = entry && entry.typicalLatency !== "n/a" ? `, typically ${entry.typicalLatency}` : "";
+  if (entry && entry.count >= 3 && entry.share >= 0.1) {
     return {
       level: "typical",
-      note: `${entry.count} of your last ${replies} replies answered ${situation} mail${latency}.`,
+      note: `${entry.count} of your ${replies} studied replies answered ${situation} mail${latency}.`,
     };
   }
   if (entry) {
     return {
       level: "sometimes",
-      note: `Only ${entry.count} of your last ${replies} replies answered ${situation} mail${latency}.`,
+      note: `Only ${entry.count} of your ${replies} studied replies answered ${situation} mail${latency}.`,
     };
   }
   if (profile.replyBehavior.neverObserved.includes(situation)) {
     return {
       level: "no-evidence",
-      note: `None of your last ${replies} studied replies answered ${situation} mail.`,
+      note: `None of your ${replies} studied replies answered ${situation} mail.`,
     };
   }
   return { level: "unknown", note: "No measured reply behavior for this situation." };

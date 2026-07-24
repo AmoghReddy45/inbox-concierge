@@ -2,6 +2,8 @@ import {
   GOOGLE_SESSION_COOKIE,
   parseCookie,
   refreshGoogleSession,
+  seal,
+  serializeCookie,
   unseal,
   type GoogleSession,
 } from "../../../../lib/google-session";
@@ -161,6 +163,19 @@ export async function GET(request: Request) {
   const session = await refreshGoogleSession(storedSession);
   if (!session?.email) return errorResponse("auth_expired", "Google authorization expired", 401);
 
+  // A refreshed access token must be persisted, or paged learn runs re-refresh
+  // on every request (threads route idiom).
+  const responseHeaders = new Headers({ "Cache-Control": "no-store" });
+  if (session.accessToken !== storedSession.accessToken) {
+    responseHeaders.append(
+      "Set-Cookie",
+      serializeCookie(GOOGLE_SESSION_COOKIE, await seal(session), {
+        maxAge: 7 * 24 * 60 * 60,
+        secure: url.protocol === "https:",
+      }),
+    );
+  }
+
   if (url.searchParams.get("probe") === "1") {
     const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
     listUrl.searchParams.set("q", "in:sent");
@@ -187,7 +202,7 @@ export async function GET(request: Request) {
       }
     }
     const payload: SentProbeResponse = { newestSentId: newestId, newestSentAt: newestAt };
-    return Response.json(payload, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(payload, { headers: responseHeaders });
   }
 
   const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/threads");
@@ -229,5 +244,5 @@ export async function GET(request: Request) {
     filtered,
     mode: "gmail",
   };
-  return Response.json(payload, { headers: { "Cache-Control": "no-store" } });
+  return Response.json(payload, { headers: responseHeaders });
 }

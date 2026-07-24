@@ -154,6 +154,9 @@ export function ThreadView({
               )}
               {situation !== "bulk" && (
                 <DraftCard
+                  // Remount on rebuild/edit so revision bumps discard the
+                  // rendered draft along with the cache entry.
+                  key={`${voiceStored.profile.builtAt}|r${voiceStored.revision}`}
                   thread={thread}
                   messages={messages}
                   sessionEmail={sessionEmail}
