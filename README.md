@@ -1,11 +1,18 @@
 # Inbox Concierge
 
+**Live: [inbox-concierge.reddy-amogh2004.workers.dev](https://inbox-concierge.reddy-amogh2004.workers.dev)** —
+click "Explore demo inbox" for the full experience with zero setup: real LLM classification,
+voice learning, and reply drafting on an authored 50-thread corpus. (Gmail sign-in is
+limited to allowlisted test users while the OAuth app is unverified — ask and I'll add you.)
+
 Gmail triage with evidence for every decision. Connect a Google account and the concierge
 pulls your last 200 threads and sorts them into buckets — Important, Can wait, Newsletter,
 Auto-archive, Customer escalations — using an LLM classification pipeline that **shows its
 evidence, measures its own cost and latency, and abstains to a "Needs review" queue when it
 isn't sure**. Create your own bucket in plain language and every thread is reclassified,
-with honest live progress.
+with honest live progress. Then it goes further: it **learns your voice from your last 200
+sent emails and drafts replies that sound like you** — with every claim about your style
+traceable to a measured number.
 
 Built for the Tenex take-home. The UI is a deliberate recreation of Superhuman's
 split-inbox language (their "Snow" and "Carbon" themes included), with the decision
