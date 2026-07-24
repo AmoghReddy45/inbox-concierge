@@ -60,14 +60,22 @@ function collapseWhitespace(text: string): string {
 }
 
 /**
- * Remove quoted-reply tails: everything from an "On ... wrote:" marker on,
- * and any individual lines quoted with ">".
+ * Remove quoted-reply tails: everything from an "On ... wrote:" marker,
+ * an Outlook-style "-----Original Message-----" divider or quoted-header
+ * block (From:/Sent|Date:/To: within a few lines), and any individual
+ * lines quoted with ">". Critical for isolating the user's own words.
  */
 export function stripQuotedTail(text: string): string {
   const lines = text.split("\n");
   const kept: string[] = [];
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
     if (/^\s*On .{0,200}wrote:\s*$/.test(line)) break;
+    if (/^\s*-{2,}\s*(Original|Forwarded) Message\s*-{2,}\s*$/i.test(line)) break;
+    if (/^\s*From:\s*\S/.test(line)) {
+      const lookahead = lines.slice(index + 1, index + 4);
+      if (lookahead.some((next) => /^\s*(Sent|Date|To):\s*\S/i.test(next))) break;
+    }
     if (/^\s*>/.test(line)) continue;
     kept.push(line);
   }

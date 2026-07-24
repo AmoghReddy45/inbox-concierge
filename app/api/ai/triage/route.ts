@@ -16,6 +16,7 @@ import {
   type VerificationResult,
   type VerifyResponse,
 } from "../../../../lib/types";
+import { computeCostMicros } from "../../../../lib/llm-cost";
 
 const MAX_BODY_BYTES = 32_000;
 const PROVIDER_URL = "https://api.moonshot.ai/v1/chat/completions";
@@ -111,20 +112,6 @@ function validateDecision(
     ambiguityReasons: ambiguityReasons.map((reason) => reason.slice(0, 240)),
     needsReview,
   };
-}
-
-function computeCostMicros(usage: TriageUsage | null): number | null {
-  if (!usage) return null;
-  const priceIn = Number(process.env.KIMI_PRICE_IN_USD_PER_MTOK);
-  const priceOut = Number(process.env.KIMI_PRICE_OUT_USD_PER_MTOK);
-  if (!Number.isFinite(priceIn) || !Number.isFinite(priceOut)) return null;
-  const priceCached = Number(process.env.KIMI_PRICE_CACHED_IN_USD_PER_MTOK);
-  const cachedRate = Number.isFinite(priceCached) ? priceCached : priceIn;
-  const freshInput = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
-  // USD/MTok × tokens = micro-USD.
-  return Math.round(
-    freshInput * priceIn + usage.cachedInputTokens * cachedRate + usage.outputTokens * priceOut,
-  );
 }
 
 /**

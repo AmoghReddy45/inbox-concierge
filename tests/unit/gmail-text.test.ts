@@ -50,6 +50,26 @@ test("stripQuotedTail removes 'On ... wrote:' tails and > quoted lines", () => {
   assert.equal(stripQuotedTail(bare), "Sounds good.\nregular trailing line");
 });
 
+test("stripQuotedTail cuts Outlook-style quoted header blocks and dividers", () => {
+  const outlook = [
+    "Sounds good, approved.",
+    "",
+    "From: Marcus Chen <marcus@northstar.health>",
+    "Sent: Tuesday, July 22, 2026 9:14 AM",
+    "To: Amogh Reddy",
+    "Subject: RE: Checkout",
+    "Their original text here.",
+  ].join("\n");
+  assert.equal(stripQuotedTail(outlook), "Sounds good, approved.");
+
+  const divider = ["Done — shipping today.", "-----Original Message-----", "From: someone"].join("\n");
+  assert.equal(stripQuotedTail(divider), "Done — shipping today.");
+
+  // A lone "From:" line without header companions is normal prose, kept.
+  const prose = "From: my perspective this is fine.\nLet's do it.";
+  assert.equal(stripQuotedTail(prose), prose);
+});
+
 test("extractMessageText prefers text/plain leaf in multipart/alternative", () => {
   const payload = {
     mimeType: "multipart/alternative",
